@@ -6,3 +6,6 @@ pyyaml
 openpyxl
 plotly
 xgboost
+optuna
+optuna_integration
+TA-Lib
