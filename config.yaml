@@ -5,10 +5,12 @@ bars_no_to_wait: 24
 risk: 0.5
 fourier_lookback_window: 100
 fourier_n_components: 10
-raw_features_g1: "Open,High,Low,Close,BOLLBU,BOLLBM,BOLLBL,DONUP,DONMID,DONLOW,MA20,MA50,MA100,EMA20,PVPTR1,PVPTR2,PVPTR3,PVPT,PVPTS1,PVPTS2,PVPTS3,TCHR"
-raw_features_g2: "ADWM,ADWMMA,WASI,ADJATR"
+raw_features_g1: "Open,High,Low,Close,BOLLBU,BOLLBM,BOLLBL,DONUP,DONMID,DONLOW,MA20,MA50,MA100,EMA20,PVPTR1,PVPTR2,PVPTR3,PVPT,PVPTS1,PVPTS2,PVPTS3"
+raw_features_g2: "ADWM,ADWMMA,WASI,ADJATR,TCHR"
 raw_features_g3: "Volume,VOLMA"
 raw_features_g4: "Sine_TimeOfDay,Cosine_TimeOfDay"
+log_features: "Volume,VOLMA"
+shift_and_log_features: "WASI|500"
 bolband_period: 20
 bolband_width: 2
 donchn_period: 20

@@ -9,3 +9,9 @@ xgboost
 optuna
 optuna_integration
 TA-Lib
+torch
+pytorch-forecasting
+pytorch-lightning
+ranger-adabelief
+seaborn
+tensorboard
