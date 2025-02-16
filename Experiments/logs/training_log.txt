@@ -1,0 +1,368 @@
+Epoch 0/20, Loss: 4.248731
+Saved checkpoint : checkpoints/checkpoint_epoch_0.pth
+Epoch 1/20, Loss: 4.265297
+Saved checkpoint : checkpoints/checkpoint_epoch_1.pth
+Epoch 2/20, Loss: 4.225967
+Saved checkpoint : checkpoints/checkpoint_epoch_2.pth
+Epoch 3/20, Loss: 4.181865
+Saved checkpoint : checkpoints/checkpoint_epoch_3.pth
+Epoch 4/20, Loss: 4.158506
+Saved checkpoint : checkpoints/checkpoint_epoch_4.pth
+Epoch 5/20, Loss: 4.131189
+Saved checkpoint : checkpoints/checkpoint_epoch_5.pth
+Epoch 6/20, Loss: 4.116750
+Saved checkpoint : checkpoints/checkpoint_epoch_6.pth
+Epoch 7/20, Loss: 4.107718
+Saved checkpoint : checkpoints/checkpoint_epoch_7.pth
+Using device: mps
+Epoch 0/20, Loss: 4.202321
+Saved checkpoint : checkpoints/checkpoint_epoch_0.pth
+Epoch 1/20, Loss: 4.277831
+Saved checkpoint : checkpoints/checkpoint_epoch_1.pth
+Epoch 2/20, Loss: 4.232399
+Saved checkpoint : checkpoints/checkpoint_epoch_2.pth
+Epoch 3/20, Loss: 4.198247
+Saved checkpoint : checkpoints/checkpoint_epoch_3.pth
+Epoch 4/20, Loss: 4.171026
+Saved checkpoint : checkpoints/checkpoint_epoch_4.pth
+Epoch 5/20, Loss: 4.153062
+Saved checkpoint : checkpoints/checkpoint_epoch_5.pth
+Epoch 6/20, Loss: 4.134621
+Saved checkpoint : checkpoints/checkpoint_epoch_6.pth
+Epoch 7/20, Loss: 4.121827
+Saved checkpoint : checkpoints/checkpoint_epoch_7.pth
+Epoch 8/20, Loss: 4.110523
+Saved checkpoint : checkpoints/checkpoint_epoch_8.pth
+Epoch 9/20, Loss: 4.100447
+Saved checkpoint : checkpoints/checkpoint_epoch_9.pth
+Epoch 10/20, Loss: 4.093381
+Saved checkpoint : checkpoints/checkpoint_epoch_10.pth
+Epoch 11/20, Loss: 4.086969
+Saved checkpoint : checkpoints/checkpoint_epoch_11.pth
+Epoch 12/20, Loss: 4.080617
+Saved checkpoint : checkpoints/checkpoint_epoch_12.pth
+Epoch 13/20, Loss: 4.079502
+Saved checkpoint : checkpoints/checkpoint_epoch_13.pth
+Epoch 14/20, Loss: 4.077296
+Saved checkpoint : checkpoints/checkpoint_epoch_14.pth
+Epoch 15/20, Loss: 4.070972
+Saved checkpoint : checkpoints/checkpoint_epoch_15.pth
+Epoch 16/20, Loss: 4.124978
+Saved checkpoint : checkpoints/checkpoint_epoch_16.pth
+Epoch 17/20, Loss: 4.132616
+Saved checkpoint : checkpoints/checkpoint_epoch_17.pth
+Epoch 18/20, Loss: 4.081820
+Saved checkpoint : checkpoints/checkpoint_epoch_18.pth
+Using device: mps
+Epoch 0/20, Loss: 4.146511
+Saved checkpoint : checkpoints/checkpoint_epoch_0.pth
+Epoch 1/20, Loss: 4.125811
+Saved checkpoint : checkpoints/checkpoint_epoch_1.pth
+Epoch 2/20, Loss: 2.978834
+Saved checkpoint : checkpoints/checkpoint_epoch_2.pth
+Epoch 3/20, Loss: 2.560561
+Saved checkpoint : checkpoints/checkpoint_epoch_3.pth
+Epoch 4/20, Loss: 2.682346
+Saved checkpoint : checkpoints/checkpoint_epoch_4.pth
+Epoch 5/20, Loss: 2.578569
+Saved checkpoint : checkpoints/checkpoint_epoch_5.pth
+Epoch 6/20, Loss: 2.553402
+Saved checkpoint : checkpoints/checkpoint_epoch_6.pth
+Epoch 7/20, Loss: 2.530498
+Saved checkpoint : checkpoints/checkpoint_epoch_7.pth
+Epoch 8/20, Loss: 2.530593
+Saved checkpoint : checkpoints/checkpoint_epoch_8.pth
+Epoch 9/20, Loss: 2.522674
+Saved checkpoint : checkpoints/checkpoint_epoch_9.pth
+Epoch 10/20, Loss: 2.522593
+Saved checkpoint : checkpoints/checkpoint_epoch_10.pth
+Epoch 11/20, Loss: 2.508679
+Saved checkpoint : checkpoints/checkpoint_epoch_11.pth
+Epoch 12/20, Loss: 2.494916
+Saved checkpoint : checkpoints/checkpoint_epoch_12.pth
+Epoch 13/20, Loss: 2.467148
+Saved checkpoint : checkpoints/checkpoint_epoch_13.pth
+Epoch 14/20, Loss: 2.469125
+Saved checkpoint : checkpoints/checkpoint_epoch_14.pth
+Epoch 15/20, Loss: 2.466698
+Saved checkpoint : checkpoints/checkpoint_epoch_15.pth
+Epoch 16/20, Loss: 2.471420
+Saved checkpoint : checkpoints/checkpoint_epoch_16.pth
+Epoch 17/20, Loss: 2.385802
+Saved checkpoint : checkpoints/checkpoint_epoch_17.pth
+Epoch 18/20, Loss: 2.386102
+Saved checkpoint : checkpoints/checkpoint_epoch_18.pth
+Epoch 19/20, Loss: 2.206760
+Saved checkpoint : checkpoints/checkpoint_epoch_19.pth
+Training Complete !
+ Fourier window : 100
+Max window : 100
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+[418.63218294 418.65847908 418.66056882 418.66074322 418.66075788
+ 418.66075907 418.66075907 418.66075907 418.66075907 418.66075907
+ 418.66075907 418.66075907]
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+Hello
+[418.63218294 418.65847908 418.66056882 418.66074322 418.66075788
+ 418.66075907 418.66075907 418.66075907 418.66075907 418.66075907
+ 418.66075907 418.66075907]
+Hello
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+Hello
+[418.63218294 418.65847908 418.66056882 418.66074322 418.66075788
+ 418.66075907 418.66075907 418.66075907 418.66075907 418.66075907
+ 418.66075907 418.66075907]
+HelloHello
+
+Clipping : 167578 - 200 - 100 = 167278Clipping : 167578 - 200 - 100 = 167278
+
+number of na s : 0number of na s : 0
+
+HelloHello
+
+[418.63218294 418.65847908 418.66056882 418.66074322 418.66075788
+ 418.66075907 418.66075907 418.66075907 418.66075907 418.66075907
+ 418.66075907 418.66075907][418.63218294 418.65847908 418.66056882 418.66074322 418.66075788
+ 418.66075907 418.66075907 418.66075907 418.66075907 418.66075907
+ 418.66075907 418.66075907]
+
+HelloHello
+
+Hello
+HelloHello
+
+Hello
+Hello<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 7956 entries, 0 to 7955
+Data columns (total 6 columns):
+ #   Column  Non-Null Count  Dtype         
+---  ------  --------------  -----         
+ 0   Date    7956 non-null   datetime64[ns]
+ 1   Open    7956 non-null   float64       
+ 2   High    7956 non-null   float64       
+ 3   Low     7956 non-null   float64       
+ 4   Close   7956 non-null   float64       
+ 5   Volume  7956 non-null   int64         
+dtypes: datetime64[ns](1), float64(4), int64(1)
+memory usage: 373.1 KB
+number of na s : 0
+Using device: mps
+ Fourier window : 100
+Max window : 100
+Loaded checkpoint from checkpoints/checkpoint_epoch_19.pth (epoch 19)
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+[418.63218294 418.65847908 418.66056882 418.66074322 418.66075788
+ 418.66075907 418.66075907 418.66075907 418.66075907 418.66075907
+ 418.66075907 418.66075907]
+Last index : 167578
+actual data shape :  (513, 6)
+167579 : 167591
+Loaded checkpoint from checkpoints/checkpoint_epoch_19.pth (epoch 19)
+2.206759828329086
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+[418.63218294 418.65847908 418.66056882 418.66074322 418.66075788
+ 418.66075907 418.66075907 418.66075907 418.66075907 418.66075907
+ 418.66075907 418.66075907]
+Last index : 167578
+actual data shape :  (513, 6)
+167579 : 167591
+Loaded checkpoint from checkpoints/checkpoint_epoch_19.pth (epoch 19)
+2.206759828329086
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+[-4.62922573 -4.62981319 -4.62981319 -4.62981319 -4.62981319 -4.62981319
+ -4.62981319 -4.62981319 -4.62981319 -4.62981319 -4.62981319 -4.62981319]
+Last index : 167578
+actual data shape :  (513, 6)
+167579 : 167591
+Loaded checkpoint from checkpoints/checkpoint_epoch_19.pth (epoch 19)
+2.206759828329086
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+Loaded checkpoint from checkpoints/checkpoint_epoch_19.pth (epoch 19)
+2.206759828329086
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+[415.40177427 415.40118681 415.40118681 415.40118681 415.40118681
+ 415.40118681 415.40118681 415.40118681 415.40118681 415.40118681
+ 415.40118681 415.40118681]
+Last index : 167578
+actual data shape :  (513, 6)
+167579 : 167591
+Loaded checkpoint from checkpoints/checkpoint_epoch_19.pth (epoch 19)
+2.206759828329086
+Clipping : 167578 - 200 - 100 = 167278
+number of na s : 0
+1st original Close : 420.031
+Transformed close : 
+0      0.0000
+1      0.0840
+2     -0.0360
+3     -0.6060
+4     -0.3910
+5     -0.6210
+6     -0.5610
+7     -0.4360
+8     -0.7910
+9     -1.0160
+10    -1.2360
+11    -1.1810
+12    -0.9310
+13    -0.5460
+14    -0.1810
+15     0.0190
+16     0.3090
+17     0.4690
+18     0.8490
+19     0.4390
+20     0.5989
+21     0.1844
+22     0.1090
+23     0.1890
+24    -0.0309
+25     0.0690
+26     0.1356
+27     0.2490
+28     0.4590
+29     0.2890
+30     0.1990
+31     0.3390
+32    -0.3400
+33     0.1490
+34    -1.7910
+35    -1.4038
+36    -1.2260
+37    -1.6310
+38    -1.7610
+39    -1.8919
+40    -1.9260
+41    -2.3110
+42    -2.6310
+43    -2.8460
+44    -3.0900
+45    -3.1610
+46    -3.4760
+47    -3.4010
+48    -3.3685
+49    -3.1810
+50    -3.1760
+51    -3.1910
+52    -3.2227
+53    -3.4456
+54    -3.5510
+55    -3.5210
+56    -3.3898
+57    -3.7510
+58    -3.6410
+59    -3.6509
+60    -3.3460
+61    -3.2911
+62    -2.9710
+63    -3.2810
+64    -2.8710
+65    -3.1510
+66    -3.1110
+67    -3.2195
+68    -3.0710
+69    -3.2609
+70    -3.0710
+71    -3.3122
+72    -3.1010
+73    -2.8225
+74    -3.2110
+75    -2.9810
+76    -2.9010
+77    -2.7110
+78    -2.8010
+79    -2.8510
+80    -2.8010
+81    -2.4110
+82    -2.2310
+83    -1.9514
+84    -1.8610
+85    -2.2110
+86    -1.9710
+87    -1.7210
+88    -1.7725
+89    -1.5960
+90    -1.4510
+91    -1.5460
+92    -1.6110
+93    -1.4610
+94    -1.7810
+95    -1.5134
+96    -1.5510
+97    -1.7410
+98    -2.0709
+99    -1.9010
+100   -2.0610
+101   -2.1310
+102   -2.0410
+103   -2.1210
+104   -1.8910
+105   -1.8210
+106   -1.6910
+107   -1.6260
+108   -1.0860
+109   -1.2010
+110   -2.0610
+111   -2.6910
+112   -2.8110
+113   -2.3710
+114   -2.7110
+Name: Close, dtype: float64
+First close :  420.031
+Y pred raw : [-4.6292257 -4.629813  -4.629813  -4.629813  -4.629813  -4.629813
+ -4.629813  -4.629813  -4.629813  -4.629813  -4.629813  -4.629813 ]
+[415.40177427 415.40118681 415.40118681 415.40118681 415.40118681
+ 415.40118681 415.40118681 415.40118681 415.40118681 415.40118681
+ 415.40118681 415.40118681]
+Last index : 167578
+actual data shape :  (513, 6)
+167579 : 167591
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 7956 entries, 0 to 7955
+Data columns (total 6 columns):
+ #   Column  Non-Null Count  Dtype         
+---  ------  --------------  -----         
+ 0   Date    7956 non-null   datetime64[ns]
+ 1   Open    7956 non-null   float64       
+ 2   High    7956 non-null   float64       
+ 3   Low     7956 non-null   float64       
+ 4   Close   7956 non-null   float64       
+ 5   Volume  7956 non-null   int64         
+dtypes: datetime64[ns](1), float64(4), int64(1)
+memory usage: 373.1 KB
+number of na s : 0
+/var/folders/ns/6tgyd_dx5lq_3chvzvfdm1sr0000gp/T/ipykernel_82750/150585370.py:99: FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+
+  data['time_delta'].fillna(data['time_delta'].median(), inplace=True)
+number of na s : 0
+/var/folders/ns/6tgyd_dx5lq_3chvzvfdm1sr0000gp/T/ipykernel_82750/738348802.py:100: FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+
+  data['time_delta'].fillna(data['time_delta'].median(), inplace=True)
+number of na s : 0
+/var/folders/ns/6tgyd_dx5lq_3chvzvfdm1sr0000gp/T/ipykernel_82750/4236212493.py:101: FutureWarning: A value is trying to be set on a copy of a DataFrame or Series through chained assignment using an inplace method.
+The behavior will change in pandas 3.0. This inplace method will never work because the intermediate object on which we are setting values always behaves as a copy.
+
+For example, when doing 'df[col].method(value, inplace=True)', try using 'df.method({col: value}, inplace=True)' or df[col] = df[col].method(value) instead, to perform the operation inplace on the original object.
+
+
+  data['time_delta'].fillna(data['time_delta'].median(), inplace=True)
