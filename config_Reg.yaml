@@ -32,13 +32,13 @@ lam: 1.0
 alpha: 0.5
 use_threshold_optimization: True
 num_boosting_rounds: 10000
-model_save_name: "Saved_Data/Regression/model1_with_2023_1month_data_reg.ubj"
+model_save_name: "Saved_Data/Regression/model1_with_2023_1month_data_reg2.ubj"
 label_scales_pickle: "Saved_Data/Regression/label_scales.pkl"
 label_power_transform: False
 train_start_date: '2023-01-01'
 train_end_date: '2023-12-31'
 inf_start_date: '2024-01-01'
-inf_end_date: '2024-06-30'
+inf_end_date: '2024-12-30'
 label_threshold: 0.8
 trade_enter_buy: 0.8
 trade_enter_sell: 0.7

@@ -1,0 +1,332 @@
+2025-02-16 22:22:38 - INFO - Logging started
+2025-02-16 22:24:36 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:25:29 - INFO - Epoch 0/20, Loss: 25.216554
+2025-02-16 22:25:30 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:26:24 - INFO - Epoch 1/20, Loss: 25.202680
+2025-02-16 22:26:24 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:27:18 - INFO - Epoch 2/20, Loss: 25.191864
+2025-02-16 22:27:19 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:28:13 - INFO - Epoch 3/20, Loss: 25.180820
+2025-02-16 22:28:13 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:29:08 - INFO - Epoch 4/20, Loss: 25.169725
+2025-02-16 22:29:08 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:30:02 - INFO - Epoch 5/20, Loss: 25.157255
+2025-02-16 22:30:03 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:30:59 - INFO - Epoch 6/20, Loss: 25.142671
+2025-02-16 22:30:59 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:31:55 - INFO - Epoch 7/20, Loss: 25.118323
+2025-02-16 22:31:56 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:32:53 - INFO - Epoch 8/20, Loss: 25.091658
+2025-02-16 22:32:54 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:33:50 - INFO - Epoch 9/20, Loss: 25.048981
+2025-02-16 22:33:51 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:34:48 - INFO - Epoch 10/20, Loss: 24.990403
+2025-02-16 22:34:48 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:35:46 - INFO - Epoch 11/20, Loss: 24.924641
+2025-02-16 22:35:47 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:36:44 - INFO - Epoch 12/20, Loss: 24.836959
+2025-02-16 22:36:45 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:37:44 - INFO - Epoch 13/20, Loss: 24.744533
+2025-02-16 22:37:44 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:38:43 - INFO - Epoch 14/20, Loss: 24.652009
+2025-02-16 22:38:44 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:39:43 - INFO - Epoch 15/20, Loss: 24.510743
+2025-02-16 22:39:44 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:40:44 - INFO - Epoch 16/20, Loss: 24.360676
+2025-02-16 22:40:44 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:41:45 - INFO - Epoch 17/20, Loss: 24.166061
+2025-02-16 22:41:46 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:42:47 - INFO - Epoch 18/20, Loss: 24.031468
+2025-02-16 22:42:47 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-16 22:43:49 - INFO - Epoch 19/20, Loss: 23.865758
+2025-02-16 23:37:49 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-16 23:46:01 - INFO - Epoch 0/20, Loss: 24.370165
+2025-02-16 23:46:34 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-16 23:59:55 - INFO - Epoch 1/20, Loss: 24.348774
+2025-02-17 00:00:14 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 00:14:03 - INFO - Epoch 2/20, Loss: 24.340562
+2025-02-17 00:14:26 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 00:26:52 - INFO - Epoch 3/20, Loss: 24.329577
+2025-02-17 00:27:09 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 00:40:45 - INFO - Epoch 4/20, Loss: 24.318736
+2025-02-17 00:41:01 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 00:54:22 - INFO - Epoch 5/20, Loss: 24.310402
+2025-02-17 00:54:43 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 01:09:39 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 01:15:37 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 01:20:56 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 01:30:17 - INFO - Epoch 0/20, Loss: 26.504699
+2025-02-17 01:30:41 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 01:44:25 - INFO - Epoch 1/20, Loss: 26.504015
+2025-02-17 01:45:01 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 02:01:55 - INFO - Epoch 2/20, Loss: 26.503276
+2025-02-17 02:02:28 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 02:15:10 - INFO - Epoch 3/20, Loss: 26.504702
+2025-02-17 02:15:31 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 02:27:23 - INFO - Epoch 4/20, Loss: 26.503663
+2025-02-17 02:27:53 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 02:35:51 - INFO - Epoch 5/20, Loss: 26.504087
+2025-02-17 02:36:14 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 03:43:31 - INFO - Epoch 6/20, Loss: 26.504636
+2025-02-17 03:59:23 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 04:07:49 - INFO - Epoch 7/20, Loss: 26.504225
+2025-02-17 04:08:07 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 04:58:24 - INFO - Epoch 8/20, Loss: 26.503814
+2025-02-17 04:58:58 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 05:59:43 - INFO - Epoch 9/20, Loss: 26.504722
+2025-02-17 06:00:06 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 08:45:06 - INFO - Epoch 10/20, Loss: 26.503731
+2025-02-17 08:45:37 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 11:14:47 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 11:25:08 - INFO - Epoch 0/20, Loss: 17.818780
+2025-02-17 11:25:19 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 11:34:24 - INFO - Epoch 1/20, Loss: 17.795657
+2025-02-17 11:34:36 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 11:43:13 - INFO - Epoch 2/20, Loss: 17.791110
+2025-02-17 11:43:28 - INFO - y pred shape : torch.Size([512, 12]) and y batch shape : torch.Size([512, 12])
+2025-02-17 11:52:49 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 11:54:09 - INFO - Epoch 0/20, Loss: 17.779655
+2025-02-17 11:54:10 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 11:55:00 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 11:56:06 - INFO - Epoch 0/20, Loss: 17.782219
+2025-02-17 11:56:07 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 11:57:15 - INFO - Epoch 1/20, Loss: 17.759326
+2025-02-17 11:57:15 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 11:58:23 - INFO - Epoch 2/20, Loss: 17.743277
+2025-02-17 11:58:23 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 11:59:31 - INFO - Epoch 3/20, Loss: 17.736749
+2025-02-17 11:59:32 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:00:40 - INFO - Epoch 4/20, Loss: 17.723901
+2025-02-17 12:00:41 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:01:50 - INFO - Epoch 5/20, Loss: 17.704159
+2025-02-17 12:01:50 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:02:59 - INFO - Epoch 6/20, Loss: 17.674812
+2025-02-17 12:03:00 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:04:10 - INFO - Epoch 7/20, Loss: 17.624288
+2025-02-17 12:04:11 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:05:22 - INFO - Epoch 8/20, Loss: 17.559622
+2025-02-17 12:05:23 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:06:34 - INFO - Epoch 9/20, Loss: 17.481410
+2025-02-17 12:06:35 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:07:47 - INFO - Epoch 10/20, Loss: 17.443430
+2025-02-17 12:07:48 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:08:59 - INFO - Epoch 11/20, Loss: 17.403581
+2025-02-17 12:09:00 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:10:14 - INFO - Epoch 12/20, Loss: 17.360349
+2025-02-17 12:10:14 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:11:27 - INFO - Epoch 13/20, Loss: 17.303333
+2025-02-17 12:11:28 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:12:41 - INFO - Epoch 14/20, Loss: 17.244322
+2025-02-17 12:12:42 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:13:55 - INFO - Epoch 15/20, Loss: 17.210969
+2025-02-17 12:13:56 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:15:10 - INFO - Epoch 16/20, Loss: 17.204232
+2025-02-17 12:15:11 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:16:26 - INFO - Epoch 17/20, Loss: 17.163012
+2025-02-17 12:16:27 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:17:42 - INFO - Epoch 18/20, Loss: 17.140330
+2025-02-17 12:17:43 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:18:59 - INFO - Epoch 19/20, Loss: 17.091674
+2025-02-17 12:27:13 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:28:46 - INFO - Epoch 19/40, Loss: 17.110780
+2025-02-17 12:28:47 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:30:20 - INFO - Epoch 20/40, Loss: 17.143852
+2025-02-17 12:30:21 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:31:52 - INFO - Epoch 21/40, Loss: 17.141372
+2025-02-17 12:31:53 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:33:27 - INFO - Epoch 22/40, Loss: 17.143677
+2025-02-17 12:33:28 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:35:03 - INFO - Epoch 23/40, Loss: 17.111796
+2025-02-17 12:35:05 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:36:39 - INFO - Epoch 24/40, Loss: 17.070437
+2025-02-17 12:36:40 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:38:16 - INFO - Epoch 25/40, Loss: 17.130341
+2025-02-17 12:38:17 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:39:54 - INFO - Epoch 26/40, Loss: 17.141106
+2025-02-17 12:39:55 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:41:33 - INFO - Epoch 27/40, Loss: 17.150251
+2025-02-17 12:41:34 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:43:10 - INFO - Epoch 28/40, Loss: 17.168202
+2025-02-17 12:43:11 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:44:47 - INFO - Epoch 29/40, Loss: 17.159992
+2025-02-17 12:44:48 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:46:23 - INFO - Epoch 30/40, Loss: 17.170596
+2025-02-17 12:46:24 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:48:02 - INFO - Epoch 31/40, Loss: 17.272802
+2025-02-17 12:48:03 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:49:40 - INFO - Epoch 32/40, Loss: 17.296959
+2025-02-17 12:49:41 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:51:19 - INFO - Epoch 33/40, Loss: 17.225427
+2025-02-17 12:51:20 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:52:59 - INFO - Epoch 34/40, Loss: 17.233325
+2025-02-17 12:52:59 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:54:39 - INFO - Epoch 35/40, Loss: 17.283843
+2025-02-17 12:54:40 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:56:23 - INFO - Epoch 36/40, Loss: 17.350340
+2025-02-17 12:56:24 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:58:08 - INFO - Epoch 37/40, Loss: 17.333382
+2025-02-17 12:58:10 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 12:59:54 - INFO - Epoch 38/40, Loss: 17.329942
+2025-02-17 12:59:55 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:01:39 - INFO - Epoch 39/40, Loss: 17.313901
+2025-02-17 13:10:12 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:11:27 - INFO - Epoch 20/40, Loss: 17.163855
+2025-02-17 13:11:28 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:12:41 - INFO - Epoch 21/40, Loss: 17.167097
+2025-02-17 13:12:41 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:13:54 - INFO - Epoch 22/40, Loss: 17.204257
+2025-02-17 13:13:55 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:19:36 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:20:49 - INFO - Epoch 20/40, Loss: 16.897627
+2025-02-17 13:20:50 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:22:02 - INFO - Epoch 21/40, Loss: 16.610776
+2025-02-17 13:22:02 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:23:15 - INFO - Epoch 22/40, Loss: 16.408230
+2025-02-17 13:23:16 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:24:30 - INFO - Epoch 23/40, Loss: 16.235852
+2025-02-17 13:24:30 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:25:44 - INFO - Epoch 24/40, Loss: 16.060849
+2025-02-17 13:25:45 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:27:01 - INFO - Epoch 25/40, Loss: 15.936409
+2025-02-17 13:27:03 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:28:19 - INFO - Epoch 26/40, Loss: 15.765245
+2025-02-17 13:28:19 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:29:35 - INFO - Epoch 27/40, Loss: 15.623177
+2025-02-17 13:29:36 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:30:53 - INFO - Epoch 28/40, Loss: 15.503365
+2025-02-17 13:30:54 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:32:14 - INFO - Epoch 29/40, Loss: 15.375171
+2025-02-17 13:32:15 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:33:34 - INFO - Epoch 30/40, Loss: 15.239104
+2025-02-17 13:33:35 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:34:56 - INFO - Epoch 31/40, Loss: 15.105237
+2025-02-17 13:34:57 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:36:19 - INFO - Epoch 32/40, Loss: 14.980680
+2025-02-17 13:36:20 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:37:42 - INFO - Epoch 33/40, Loss: 14.868048
+2025-02-17 13:37:43 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:39:05 - INFO - Epoch 34/40, Loss: 14.721732
+2025-02-17 13:39:06 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:40:27 - INFO - Epoch 35/40, Loss: 14.597844
+2025-02-17 13:40:28 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:41:54 - INFO - Epoch 36/40, Loss: 14.472507
+2025-02-17 13:41:55 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:43:24 - INFO - Epoch 37/40, Loss: 14.333066
+2025-02-17 13:43:25 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:44:54 - INFO - Epoch 38/40, Loss: 14.262777
+2025-02-17 13:44:55 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:46:25 - INFO - Epoch 39/40, Loss: 14.111969
+2025-02-17 13:55:24 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:56:33 - INFO - Epoch 40/50, Loss: 13.860687
+2025-02-17 13:56:34 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:57:42 - INFO - Epoch 41/50, Loss: 13.729501
+2025-02-17 13:57:43 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 13:58:53 - INFO - Epoch 42/50, Loss: 13.630390
+2025-02-17 13:58:55 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 14:00:05 - INFO - Epoch 43/50, Loss: 13.582589
+2025-02-17 14:00:06 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 14:01:17 - INFO - Epoch 44/50, Loss: 13.535346
+2025-02-17 14:01:18 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 14:02:32 - INFO - Epoch 45/50, Loss: 13.499184
+2025-02-17 14:02:33 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 14:03:48 - INFO - Epoch 46/50, Loss: 13.444531
+2025-02-17 14:03:50 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 14:05:04 - INFO - Epoch 47/50, Loss: 13.410582
+2025-02-17 14:05:06 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 14:06:23 - INFO - Epoch 48/50, Loss: 13.371219
+2025-02-17 14:06:24 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 14:07:43 - INFO - Epoch 49/50, Loss: 13.309577
+2025-02-17 15:03:33 - INFO - Logging started
+2025-02-17 15:03:55 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:05:05 - INFO - Epoch 40/50, Loss: 263.088448
+2025-02-17 15:05:06 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:06:13 - INFO - Epoch 41/50, Loss: 263.078400
+2025-02-17 15:06:14 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:07:22 - INFO - Epoch 42/50, Loss: 263.062357
+2025-02-17 15:07:23 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:08:35 - INFO - Epoch 43/50, Loss: 263.043967
+2025-02-17 15:08:36 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:09:47 - INFO - Epoch 44/50, Loss: 263.027177
+2025-02-17 15:09:47 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:10:57 - INFO - Epoch 45/50, Loss: 263.007883
+2025-02-17 15:10:58 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:12:08 - INFO - Epoch 46/50, Loss: 262.993167
+2025-02-17 15:12:09 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:13:21 - INFO - Epoch 47/50, Loss: 262.978276
+2025-02-17 15:13:22 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:14:34 - INFO - Epoch 48/50, Loss: 262.966967
+2025-02-17 15:14:35 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-17 15:15:48 - INFO - Epoch 49/50, Loss: 262.957426
+2025-02-17 18:26:05 - INFO - Logging started
+2025-02-17 18:49:31 - INFO - Logging started
+2025-02-17 20:05:45 - INFO - Logging started
+2025-02-17 20:06:18 - INFO - Index : 0
+2025-02-17 20:06:19 - INFO - Index : 100
+2025-02-17 20:06:31 - INFO - Index : 200
+2025-02-17 20:06:59 - INFO - Index : 300
+2025-02-17 20:07:41 - INFO - Index : 400
+2025-02-17 20:08:39 - INFO - Index : 500
+2025-02-17 20:09:51 - INFO - Index : 600
+2025-02-17 20:11:17 - INFO - Index : 700
+2025-02-17 20:12:59 - INFO - Index : 800
+2025-02-17 20:14:57 - INFO - Index : 900
+2025-02-17 20:17:09 - INFO - Index : 1000
+2025-02-17 20:19:37 - INFO - Index : 1100
+2025-02-17 20:22:20 - INFO - Index : 1200
+2025-02-17 20:25:18 - INFO - Index : 1300
+2025-02-17 20:28:31 - INFO - Index : 1400
+2025-02-17 20:32:02 - INFO - Index : 1500
+2025-02-18 11:26:59 - INFO - Logging started
+2025-02-18 11:27:19 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:29:10 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:31:20 - INFO - Epoch 1/50, Loss: 263.024781
+2025-02-18 11:31:21 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:33:38 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:35:51 - INFO - Epoch 1/50, Loss: 263.217132
+2025-02-18 11:35:53 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:38:07 - INFO - Epoch 2/50, Loss: 263.165634
+2025-02-18 11:38:08 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:39:36 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:45:59 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:50:35 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:56:15 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-18 11:59:11 - INFO - y pred shape : torch.Size([256, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-19 16:59:38 - INFO - Logging started
+2025-02-19 17:00:59 - INFO - y pred shape : torch.Size([256, 12, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-19 17:02:00 - INFO - y pred shape : torch.Size([256, 12, 12]) and y batch shape : torch.Size([256, 12])
+2025-02-19 17:08:46 - INFO - y pred shape : torch.Size([64, 12, 12]) and y batch shape : torch.Size([64, 12])
+2025-02-19 18:11:00 - INFO - y pred shape : torch.Size([64, 12, 12]) and y batch shape : torch.Size([64, 12])
+2025-02-19 18:16:26 - INFO - y pred shape : torch.Size([64, 12, 12]) and y batch shape : torch.Size([64, 12])
+2025-02-19 18:37:34 - INFO - y pred shape : torch.Size([64, 12]) and y batch shape : torch.Size([64, 12])
+2025-02-19 18:39:19 - INFO - Epoch 1/20, Loss: 264.493438
+2025-02-19 18:39:20 - INFO - y pred shape : torch.Size([64, 12]) and y batch shape : torch.Size([64, 12])
+2025-02-19 18:41:01 - INFO - Epoch 2/20, Loss: 263.868116
+2025-02-19 18:41:01 - INFO - y pred shape : torch.Size([64, 12]) and y batch shape : torch.Size([64, 12])
+2025-02-19 18:53:49 - INFO - y pred shape : torch.Size([118, 12]) and y batch shape : torch.Size([118, 12])
+2025-02-19 18:54:55 - INFO - Epoch 1/20, Loss: 264.238474
+2025-02-19 18:54:56 - INFO - y pred shape : torch.Size([118, 12]) and y batch shape : torch.Size([118, 12])
+2025-02-19 18:56:04 - INFO - y pred shape : torch.Size([64, 12]) and y batch shape : torch.Size([64, 12])
+2025-02-19 19:05:36 - INFO - Logging started
+2025-02-19 19:05:55 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:06:59 - INFO - Epoch 1/20, Loss: 26.830183
+2025-02-19 19:07:00 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:08:04 - INFO - Epoch 2/20, Loss: 26.809994
+2025-02-19 19:08:04 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:09:09 - INFO - Epoch 3/20, Loss: 26.822899
+2025-02-19 19:09:09 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:10:15 - INFO - Epoch 4/20, Loss: 26.808954
+2025-02-19 19:10:15 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:11:20 - INFO - Epoch 5/20, Loss: 26.798840
+2025-02-19 19:11:21 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:12:28 - INFO - Epoch 6/20, Loss: 26.804374
+2025-02-19 19:12:29 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:13:36 - INFO - Epoch 7/20, Loss: 26.793135
+2025-02-19 19:13:36 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:14:45 - INFO - Epoch 8/20, Loss: 26.784064
+2025-02-19 19:14:45 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:15:55 - INFO - Epoch 9/20, Loss: 26.786107
+2025-02-19 19:15:56 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:17:05 - INFO - Epoch 10/20, Loss: 26.783586
+2025-02-19 19:17:06 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
+2025-02-19 19:18:17 - INFO - Epoch 11/20, Loss: 26.785223
+2025-02-19 19:18:18 - INFO - y pred shape : torch.Size([128, 12]) and y batch shape : torch.Size([128, 12])
