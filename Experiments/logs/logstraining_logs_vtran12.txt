@@ -325,3 +325,4 @@
 2025-02-26 10:27:24 - INFO - Iteration 250: Loss = 2.381293, Accuracy = 27.43%, MSE = 74.1032
 2025-02-26 10:43:19 - INFO - Iteration 260: Loss = 2.397067, Accuracy = 27.40%, MSE = 74.1982
 2025-02-26 10:58:06 - INFO - Iteration 270: Loss = 2.393048, Accuracy = 27.39%, MSE = 74.2941
+2025-02-26 11:40:46 - INFO - Iteration 280: Loss = 2.403888, Accuracy = 27.37%, MSE = 74.3922
