@@ -15,3 +15,5 @@ pytorch-lightning
 seaborn
 tensorboard
 torch_optimizer
+imbalanced-learn
+smogn
