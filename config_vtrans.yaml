@@ -2,7 +2,7 @@ data_excel_path: "../data/SPY_Data_Dec2024.xlsx"
 all_data_excel_path: "../data/SPY_AllData.xlsx"
 atr_multiplier: 0.02
 bars_no_to_wait: 9
-risk: 0.5
+risk: 0.8
 fourier_lookback_window: 100
 fourier_n_components: 10
 raw_features_g1: "Open,High,Low,Close,BOLLBU,BOLLBM,BOLLBL,DONUP,DONMID,DONLOW,MA20,MA50,MA100,EMA20,PVPTR1,PVPTR2,PVPTR3,PVPT,PVPTS1,PVPTS2,PVPTS3"
