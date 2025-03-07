@@ -18,8 +18,8 @@ stand_scaler_path: 'Saved_Data/Transformer/stand_scaler.pkl'
 minmax_scaler_path: 'Saved_Data/Transformer/minmax_scaler.pkl'
 robust_scaler_path: 'Saved_Data/Transformer/robust_scaler.pkl'
 fourier_minmax_path: 'Saved_Data/Transformer/fourier_minmax.pkl'
-Close_Diff_Features: "BOLLBU,BOLLBM,BOLLBL,DONUP,DONMID,DONLOW,MA20,MA50,MA100,EMA20,PVPTR1,PVPTR2,PVPTR3,PVPT,PVPTS1,PVPTS2,PVPTS3"
-training_features: "BOLLBU,BOLLBM,BOLLBL,DONUP,DONMID,DONLOW,MA20,MA50,MA100,EMA20,PVPTR1,PVPTR2,PVPTR3,PVPTS1,PVPTS2,PVPTS3,Sine_TimeOfDay,Cosine_TimeOfDay,ADWMMA,TCHR,ADJATR,Volatility,Momentum"
+Close_Diff_Features: "Open,High,Low,BOLLBU,BOLLBL,DONUP,DONLOW,MA20,MA50,MA100,EMA20,PVPTR1,PVPTR2,PVPTR3,PVPT,PVPTS1,PVPTS2,PVPTS3"
+training_features: "Open,High,Low,BOLLBU,BOLLBL,DONUP,DONLOW,MA20,MA50,MA100,EMA20,PVPTR1,PVPTR2,PVPTR3,PVPTS1,PVPTS2,PVPTS3,Sine_TimeOfDay,Cosine_TimeOfDay,ADWMMA,TCHR,ADJATR,Volatility,Momentum"
 bolband_period: 20
 bolband_width: 2
 donchn_period: 20
