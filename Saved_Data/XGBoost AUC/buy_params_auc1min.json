@@ -1,0 +1,19 @@
+{
+    "params": {
+        "objective": "binary:logistic",
+        "eval_metric": "aucpr",
+        "initial_lr": 0.08248344048840575,
+        "final_lr": 0.0030779889101123737,
+        "tree_method": "approx",
+        "gamma": 0.03196176387821714,
+        "max_depth": 9,
+        "min_child_weight": 5.233660943422821,
+        "subsample": 0.774463686729816,
+        "colsample_bytree": 0.5576654959304007,
+        "lambda": 11.376639751384248,
+        "alpha": 0.32064101948582757
+    },
+    "threshold": {
+        "threshold": 0.10723567448378567
+    }
+}

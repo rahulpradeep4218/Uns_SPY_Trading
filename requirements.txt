@@ -17,3 +17,4 @@ tensorboard
 torch_optimizer
 imbalanced-learn
 smogn
+pyarrow
