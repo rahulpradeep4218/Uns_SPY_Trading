@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading_assistant"
+version = "0.1.0"
+dependencies = [
+    "dagster",
+    "dagster-webserver",
+    "pandas",
+    "scikit-learn",
+    "mlflow"
+]
+
+[project.optional-dependencies]
+dev = ["pytest" , "ruff"]
+
+[tool.setuptools]
+packages = ["trading_dagster", "functions"]

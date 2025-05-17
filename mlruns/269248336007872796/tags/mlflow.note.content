@@ -1,0 +1,1 @@
+This experiment is for predicting stock prices using XGBoost. It uses technical indicators as features and predicts the high and low prices for next n bars

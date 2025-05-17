@@ -1,0 +1,6 @@
+artifact_location: mlflow-artifacts:/269248336007872796
+creation_time: 1747378460465
+experiment_id: '269248336007872796'
+last_update_time: 1747378460465
+lifecycle_stage: active
+name: xgboost_regression_power
