@@ -1,11 +1,14 @@
-from numpy import require
 from dagster import asset, MetadataValue, MaterializeResult
 import pandas as pd
 from functions.indicators import add_all_indicators
-from .resources import IndicatorConfig
 
-@asset
-def load_data(context, indicator_config: IndicatorConfig) -> pd.DataFrame:
+@asset(config_schema={
+    "sheet_names": str,
+    "all_data_path": str,
+    "start_date": str,
+    "end_date": str,
+})
+def load_data(context) -> pd.DataFrame:
     """
     Load data from an Excel file and filter it based on the provided date range.
     
@@ -18,13 +21,13 @@ def load_data(context, indicator_config: IndicatorConfig) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Filtered DataFrame containing the loaded data.
     """
-    conf = indicator_config.load()
-    cfg = conf['training_details']
+
+    cfg = context.op_config
     # Split the sheet names into a list
     sheet_names = cfg["sheet_names"]
     all_data_path = cfg["all_data_path"]
-    start_date = str(cfg["start_date"])
-    end_date = str(cfg["end_date"])
+    start_date = cfg["start_date"]
+    end_date = cfg["end_date"]
 
     sheet_names = [sheet.strip() for sheet in sheet_names.split(",")]
 
@@ -55,7 +58,7 @@ def load_data(context, indicator_config: IndicatorConfig) -> pd.DataFrame:
     return filtered_data
 
 @asset
-def add_indicators(context, load_data: pd.DataFrame, indicator_config: IndicatorConfig) -> pd.DataFrame:
+def add_indicators(context, load_data: pd.DataFrame) -> pd.DataFrame:
     """
     Add technical indicators to the loaded data.
 
@@ -65,8 +68,7 @@ def add_indicators(context, load_data: pd.DataFrame, indicator_config: Indicator
     Returns:
         pd.DataFrame: DataFrame with added indicators.
     """
-    conf = indicator_config.load()
-    cfg = conf['indicators']
+    cfg = context.op_config
     # Add all indicators to the data
     data_with_indicators = add_all_indicators(load_data, cfg)
     

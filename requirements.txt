@@ -21,3 +21,6 @@ pyarrow
 mlflow
 dagster
 dagster-webserver
+streamlit
+duckdb
+ruamel.yaml

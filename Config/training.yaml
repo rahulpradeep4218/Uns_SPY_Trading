@@ -1,0 +1,26 @@
+training_details:
+  all_data_path: ../data/SPY_AllData.xlsx
+  end_date: 2023-01-31
+  sheet_names: 1minData1-6-2022,1minData1-12-2023
+  start_date: 2023-01-01
+
+# Indicators details  
+indicators:
+
+  available: bolband,donchn,tchr,adwm,wasi,volume_ma,atr
+  selected: wasi
+
+  bolband:
+    period: 20
+    width: 2
+  atr:
+    ma: 20
+    period: 4
+  donchn:
+    period: 20
+  tchr:
+    adj: 5
+    period: 100
+    range: highlow
+    retracement: long
+
