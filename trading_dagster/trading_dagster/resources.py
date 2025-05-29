@@ -1,13 +1,14 @@
 from logging import config
 import yaml
-from dagster import ConfigurableResource
+from dagster import ConfigurableResource, resource
+import mlflow
 
-class IndicatorConfig(ConfigurableResource):
+class TrainingConfig(ConfigurableResource):
     """
-    Configuration for loading and processing indicator data.
+    Configuration for all training pipeline
     """
 
-    config_path: str = "../Config/training.yaml"
+    config_path: str
 
     def load(self) -> dict:
         """
@@ -17,3 +18,20 @@ class IndicatorConfig(ConfigurableResource):
             conf = yaml.safe_load(file)
             return conf
         return {}
+    
+
+class MLFlowResource(ConfigurableResource):
+    """
+    MLflow as a resource for tracking experiments.
+    """
+    tracking_uri: str
+    experiment_name: str
+    def load(self):
+        """
+        loads mlflow from configuration
+        """
+        mlflow.set_tracking_uri(self.tracking_uri)
+        mlflow.set_experiment(self.experiment_name)
+        mlflow.set_tag("dagster", "trading_dagster")
+        return mlflow
+          
