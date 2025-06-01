@@ -1,7 +1,10 @@
 
-from webbrowser import get
-
+from gc import disable
+from math import e
+from pdb import run
 from matplotlib.collections import AsteriskPolygonCollection
+from numpy import test
+from torch import mode
 from dagster import asset, MetadataValue, MaterializeResult
 import pandas as pd
 
@@ -25,12 +28,13 @@ from functions.ml_pipeline import (
     add_indicators,
     close_diff_transform,
     normalize_timegaps_transform,
-    scale_features
+    scale_features,
+    get_model_evaluation
 )
 
 from datetime import datetime
 import os
-
+import mlflow
 
 
 
@@ -127,6 +131,7 @@ def training_data(context, raw_data, training_config: TrainingConfig, model_meta
             "Parquet_Training_Data_Link": MetadataValue.url(parq_link),
         }
     )
+    return train_data
 
 
 @asset
@@ -155,6 +160,7 @@ def test_data(context, raw_data, training_config: TrainingConfig, model_metadata
             "Parquet_Test_Data_Link": MetadataValue.url(parq_link),
         }
     )
+    return test_data
 
 
 @asset
@@ -412,52 +418,12 @@ def train_test_split_low_model(context, input_output_df_training: dict, training
 
 
 @asset
-def quantile_dmatrix_high(context, train_test_split_high_model: dict) -> dict:
-    """
-    Create DMatrix for quantile regression for the buy model.
-    
-    Args:
-        train_test_split_high_model (dict): Dictionary containing training and testing sets for the buy model.
-
-    Returns:
-        dict: Dictionary containing DMatrix for quantile regression.
-    """
-
-    dmatrix_dict = get_quantile_dmatrix(
-        df_dict=train_test_split_high_model, 
-        context=context, 
-        high_low='high'
-    )
-    
-    return dmatrix_dict
-
-@asset
-def quantile_dmatrix_low(context, train_test_split_low_model: dict) -> dict:
-    """
-    Create DMatrix for quantile regression for the sell model.
-    
-    Args:
-        train_test_split_low_model (dict): Dictionary containing training and testing sets for the sell model.
-
-    Returns:
-        dict: Dictionary containing DMatrix for quantile regression.
-    """
-    dmatrix_dict = get_quantile_dmatrix(
-        df_dict=train_test_split_low_model, 
-        context=context, 
-        high_low='low'
-    )
-    
-    return dmatrix_dict
-
-
-@asset
-def hyperparameter_tuning_high(context, quantile_dmatrix_high: dict, training_config: TrainingConfig, model_metadata) -> dict:
+def hyperparameter_tuning_high(context, train_test_split_high_model: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Perform hyperparameter tuning for the buy model.
     
     Args:
-        quantile_dmatrix_high (dict): Dictionary containing DMatrix for quantile regression for the buy model.
+        train_test_split_high_model (dict): Dictionary containing training and testing sets for the buy model.
 
     Returns:
         dict: Dictionary containing the best hyperparameters for the buy model.
@@ -465,9 +431,9 @@ def hyperparameter_tuning_high(context, quantile_dmatrix_high: dict, training_co
     conf = training_config.load()
     
     best_params = optimize_parameters(
-        dmat_dict=quantile_dmatrix_high, 
-        config=conf, 
-        context=context, 
+        df_dict=train_test_split_high_model,
+        config=conf,
+        context=context,
         model_metadata=model_metadata,
         high_low='high'
     )
@@ -476,12 +442,12 @@ def hyperparameter_tuning_high(context, quantile_dmatrix_high: dict, training_co
 
 
 @asset
-def hyperparameter_tuning_low(context, quantile_dmatrix_low: dict, training_config: TrainingConfig, model_metadata) -> dict:
+def hyperparameter_tuning_low(context, train_test_split_low_model: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Perform hyperparameter tuning for the sell model.
     
     Args:
-        quantile_dmatrix_low (dict): Dictionary containing DMatrix for quantile regression for the sell model.
+        train_test_split_low_model (dict): Dictionary containing training and testing sets for the sell model.
 
     Returns:
         dict: Dictionary containing the best hyperparameters for the sell model.
@@ -489,8 +455,8 @@ def hyperparameter_tuning_low(context, quantile_dmatrix_low: dict, training_conf
     conf = training_config.load()
     
     best_params = optimize_parameters(
-        dmat_dict=quantile_dmatrix_low, 
-        config=conf, 
+        df_dict=train_test_split_low_model,
+        config=conf,
         context=context, 
         model_metadata=model_metadata,
         high_low='low'
@@ -498,57 +464,108 @@ def hyperparameter_tuning_low(context, quantile_dmatrix_low: dict, training_conf
     
     return best_params
 
+@asset
+def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_resource: MLFlowResource, hyperparameter_tuning_high: dict, hyperparameter_tuning_low: dict) -> dict:
+    """
+    Start a parent run for the training pipeline.
+    
+    Args:
+        training_config (TrainingConfig): Configuration for the training run.
+
+    Returns:
+        str: The run ID of the parent run.
+    """
+    conf = training_config.load()
+    
+  
+    exp_id = mlflow_resource.experiment_id
+    run_name = mlflow_resource.run_name
+    model_name = mlflow_resource.model_name
+
+
+    context.log.info(f"Starting parent run for model: {model_name} with run name: {run_name} , experiment ID: {exp_id}")
+    #context.log.info(f"MLflow artifact URI: {artifact_uri}")
+    if mlflow.active_run() is not None:
+        context.log.warning("There is an active MLflow run. It will be ended before starting a new one.")
+        mlf.end_run()
+    with mlflow.start_run(run_name=run_name, experiment_id=exp_id) as run:
+        run_id = run.info.run_id
+        context.log.info(f"Parent run started with ID: {run_id}")
+
+    output_dict = {
+        'parent_run_id': run_id,
+        'parent_run_name': run_name,
+    }
+    context.add_output_metadata(
+        {
+            "parent_run_id": MetadataValue.text(run_id),
+            "parent_run_name": MetadataValue.text(run_name),
+        }
+    )
+    return output_dict
+
 
 @asset
-def train_model_high(context, quantile_dmatrix_high: dict, hyperparameter_tuning_high: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource) -> dict:
+def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_high_model: dict, hyperparameter_tuning_high: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource) -> dict:
     """
     Train the buy model using the best hyperparameters.
     
     Args:
-        quantile_dmatrix_high (dict): Dictionary containing DMatrix for quantile regression for the buy model.
+        train_test_split_high_model (dict): Dictionary containing training and testing sets for the buy model.
         hyperparameter_tuning_high (dict): Dictionary containing the best hyperparameters for the buy model.
 
     Returns:
         dict: Dictionary containing the trained model and its metadata.
     """
     conf = training_config.load()
-    mlf = mlflow_resource.load()
-    xgb_model_high = train_model(
-        dmat_dict=quantile_dmatrix_high, 
+    parent_run_id = start_mlflow_parent_run['parent_run_id']
+    exp_id = mlflow_resource.experiment_id
+    mlflow_resource_dict = {
+        'parent_run_id': parent_run_id,
+        'experiment_id': exp_id,
+    }
+    xgb_model_high_info = train_model(
+        df_dict=train_test_split_high_model,
         params=hyperparameter_tuning_high,
         config=conf, 
         context=context, 
         high_low='high',
-        mlflow_resource=mlf
+        mlflow_resource_dict=mlflow_resource_dict
     )
     
-    return xgb_model_high
+    return xgb_model_high_info  
 
 
 @asset
-def train_model_low(context, quantile_dmatrix_low: dict, hyperparameter_tuning_low: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource) -> dict:
+def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low_model: dict, hyperparameter_tuning_low: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource) -> dict:
     """
     Train the sell model using the best hyperparameters.
     
     Args:
-        quantile_dmatrix_low (dict): Dictionary containing DMatrix for quantile regression for the sell model.
+        train_test_split_low_model (dict): Dictionary containing training and testing sets for the sell model.
         hyperparameter_tuning_low (dict): Dictionary containing the best hyperparameters for the sell model.
 
     Returns:
         dict: Dictionary containing the trained model and its metadata.
     """
     conf = training_config.load()
-    mlf = mlflow_resource.load()
-    xgb_model_low = train_model(
-        dmat_dict=quantile_dmatrix_low, 
+    run_id = start_mlflow_parent_run['parent_run_id']
+    exp_id = mlflow_resource.experiment_id
+    mlflow_resource_dict = {
+        'parent_run_id': run_id,
+        'experiment_id': exp_id,
+    }
+
+    xgb_model_low_info = train_model(
+        df_dict=train_test_split_low_model,
         params=hyperparameter_tuning_low,
         config=conf, 
         context=context, 
         high_low='low',
-        mlflow_resource=mlf
+        mlflow_resource_dict=mlflow_resource_dict
     )
     
-    return xgb_model_low
+    return xgb_model_low_info
 
 @asset
 def normalize_timegaps_test(context, test_data: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
@@ -765,58 +782,22 @@ def input_output_df_test(context, scale_data_test: pd.DataFrame, training_config
     return output_dict
 
 @asset
-def evaluate_model(context, input_output_df_test: dict, train_model_high, train_model_low, training_config: TrainingConfig, model_metadata) -> dict:
-    """
-    Evaluate the model using the test data.
-
-    Args:
-        context: The context object.
-        input_output_df_test (dict): Dictionary containing input and output DataFrames for the test data.
-        training_config (TrainingConfig): The training configuration object.
-        model_metadata: Metadata related to the model.
-
-    Returns:
-        dict: Evaluation metrics and results.
-    """
-    # Extract input and output DataFrames
-    conf = training_config.load()
-    test_df = input_output_df_test['input_df']
-    output_high_df = input_output_df_test['output_high_df']
-    output_low_df = input_output_df_test['output_low_df']
-
-    quantile_dmatrix = xgb.QuantileDMatrix(test_df)
-    high_preds = train_model_high.predict(quantile_dmatrix)
-    low_preds = train_model_low.predict(quantile_dmatrix)
-    output_df = test_df.copy()
-    output_df['pred_sell_stop'] = high_preds[:, 1]
-    output_df['pred_buy_take'] = high_preds[:, 0]
-    output_df['pred_sell_take'] = low_preds[:, 1]
-    output_df['pred_buy_stop'] = low_preds[:, 0]
-    columns_to_update = ['pred_buy_stop', 'pred_buy_take', 'pred_sell_stop', 'pred_sell_take']
-    output_df[columns_to_update] = output_df[columns_to_update] * output_df['Close'].values[:, None] / 10000
-    output_df['pred_sell_stop'] = output_df['pred_sell_stop'] + output_df['Close']
-    output_df['pred_buy_take'] = output_df['pred_buy_take'] + output_df['Close']
-    output_df['pred_sell_take'] = output_df['Close'] - output_df['pred_sell_take']
-    output_df['pred_buy_stop'] = output_df['Close'] - output_df['pred_buy_stop']
-
-    output_df['buy_risk_reward'] = (output_df['pred_buy_take'] - output_df['Close']) / (output_df['Close'] - output_df['pred_buy_stop']) * 100
-    output_df['sell_risk_reward'] = (output_df['Close'] - output_df['pred_sell_take']) / (output_df['pred_sell_stop'] - output_df['Close']) * 100
-
-
-
-    # TODO: Implement model evaluation logic here
-
-    # Example evaluation metrics (replace with actual metrics)
-    evaluation_metrics = {
-        "mean_absolute_error": 0.0,
-        "mean_squared_error": 0.0,
-        "r2_score": 0.0,
+def evaluate_model(context, input_output_df_test: dict, scale_data_test:pd.DataFrame, train_model_high, train_model_low, mlflow_resource:MLFlowResource, training_config: TrainingConfig, model_metadata, start_mlflow_parent_run) -> pd.DataFrame:
+    models_dict = {
+        'train_model_high': train_model_high,
+        'train_model_low': train_model_low
     }
 
-    context.add_output_metadata(
-        {
-            "evaluation_metrics": MetadataValue.md(evaluation_metrics),
-        }
+    conf = training_config.load()
+    evaluation_results = get_model_evaluation(
+        input_output_df_test=input_output_df_test,
+        models=models_dict,
+        config=conf,
+        context=context,
+        model_metadata=model_metadata,
+        mlflow_resource=mlflow_resource,
+        parent_run_id=start_mlflow_parent_run['parent_run_id'],
+        original_data=scale_data_test
     )
+    return evaluation_results
 
-    return evaluation_metrics

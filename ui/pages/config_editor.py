@@ -1,10 +1,15 @@
+from numpy import save
 import streamlit as st
 from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
+from ruamel.yaml.scalarfloat import ScalarFloat
 from pathlib import Path
 from streamlit import rerun
+from io import StringIO
+
 
 CONFIG_PATH = Path("Config/training.yaml")
+CONFIG_PATH2 = Path("Config/training2.yaml")
 yaml = YAML()
 yaml.preserve_quotes = True
 
@@ -14,10 +19,12 @@ type_dict = {
     'str': str,
     'bool': bool
 }
+
 def load_config():
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH, 'r') as file:
             config = yaml.load(file)
+            
             return config
     else:
         st.error("Configuration file not found!")
@@ -25,16 +32,30 @@ def load_config():
         # return {"indicators": {"available": "", "selected": ""}}
     return {}
 
+def sanitize_yaml(data):
+    if isinstance(data, CommentedMap):
+        return {k: sanitize_yaml(v) for k, v in data.items()}
+    elif isinstance(data, CommentedSeq):
+        return [sanitize_yaml(i) for i in data]
+    elif isinstance(data, ScalarFloat):
+        return float(data)
+    else:
+        return data
+    
+
 def save_config(config):
+    #find_yaml_issue_ruamel(config)
+    config = sanitize_yaml(config)
     with open(CONFIG_PATH, 'w') as file:
         yaml.dump(config, file)
         st.success("Configuration saved successfully!")
 
 
+
 def update_config_available(config):
     if config['indicators'] is not None:
         config['indicators']['available'] = ",".join(st.session_state['available'])
-        save_config(config)
+        #save_config(config)
     else:
         st.error("No configuration found to save.")
 
@@ -49,6 +70,7 @@ def indicator_state_transform_init(ind):
     st.session_state['transform'][ind]['robust'] = False
 
 config = load_config()
+
 indicator_config = config.get('indicators', {})
 
 #Load Configuration
@@ -83,6 +105,7 @@ if 'available' not in st.session_state:
         st.session_state['model_parameters'][par_name]['min'] = par.get('min', '')
         st.session_state['model_parameters'][par_name]['max'] = par.get('max', '')
         st.session_state['model_parameters'][par_name]['base'] = True if par_name in base_model_parameters else False
+        st.session_state['model_parameters'][par_name]['log'] = par.get('log', False)
 
         
 
@@ -201,7 +224,7 @@ for ind in st.session_state['available']:
 
 st.subheader("Model Parameters and Hyperparameters")
 
-header = st.columns([3,2,3,2,2,2,2,4])
+header = st.columns([3,2,3,2,2,2,2,2,4])
 header[0].markdown("**Name**")
 header[1].markdown("**Active**")
 header[2].markdown("**Type**")
@@ -209,10 +232,11 @@ header[3].markdown("**HP?**")
 header[4].markdown("**Min**")
 header[5].markdown("**Max**")
 header[6].markdown("**Base**")
-header[7].markdown("**Value**")
+header[7].markdown("**Log**")
+header[8].markdown("**Value**")
 
 for par, settings in st.session_state['model_parameters'].items():
-    row = st.columns([3,2,3,2,2,2,2,4])
+    row = st.columns([3,2,3,2,2,2,2,2,4])
     row[0].markdown(f"**{par}**")
     active = row[1].checkbox("", value=settings['active'], key=f"active_{par}")
     type_ = row[2].selectbox("", options=["int", "float", "str"], label_visibility="collapsed", index=["int", "float", "str"].index(settings['type']), key=f"type_{par}")
@@ -220,7 +244,8 @@ for par, settings in st.session_state['model_parameters'].items():
     min_ = row[4].text_input("", value=str(settings['min']), label_visibility="collapsed", key=f"min_{par}")
     max_ = row[5].text_input("", value=str(settings['max']), label_visibility="collapsed", key=f"max_{par}")
     base = row[6].checkbox("", value=settings['base'], key=f"base_{par}")
-    value = row[7].text_input("", value=str(settings['value']), label_visibility="collapsed", key=f"value_{par}")
+    log = row[7].checkbox("", value=settings['log'], key=f"log_{par}")
+    value = row[8].text_input("", value=str(settings['value']), label_visibility="collapsed", key=f"value_{par}")
 
     st.session_state['model_parameters'][par] = {
         'active': active,
@@ -229,6 +254,7 @@ for par, settings in st.session_state['model_parameters'].items():
         'min': type_dict[type_](min_) if min_ != '' else '',
         'max': type_dict[type_](max_) if max_ != '' else '',
         'base': base,
+        'log': log,
         'value': type_dict[type_](value) if value != '' else ''
     }
 
@@ -236,9 +262,10 @@ for par, settings in st.session_state['model_parameters'].items():
 
 
 if st.button("Save Configuration"):
+
     if config['indicators'] is not None:
         config['indicators']['selected'] = ",".join(selected_indicators_ctl)
-        save_config(config)
+        #save_config(config)
     else:
         st.error("No configuration found to save.")
     update_config_available(config)
@@ -259,6 +286,7 @@ if st.button("Save Configuration"):
             'name': par,
             'type': settings['type'],
             'hp': settings['hp'],
+            'log': settings['log'],
             **({'min': settings['min']} if settings['min'] != '' else {}),
             **({'max': settings['max']} if settings['max'] != '' else {}),
             **({'value': settings['value']} if settings['value'] != '' else {}),

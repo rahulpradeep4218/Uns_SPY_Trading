@@ -1,0 +1,6 @@
+artifact_location: file:///c:/Projects/Trading/Uns_SPY_Trading/Experiments/mlruns/294803959229187812
+creation_time: 1748725931474
+experiment_id: '294803959229187812'
+last_update_time: 1748725931474
+lifecycle_stage: active
+name: xgboost_power

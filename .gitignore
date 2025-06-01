@@ -177,3 +177,5 @@ trading_dagster/tmp*
 trading_dagster/dagster_home/storage*
 training_runs/*
 trading_dagster/training_runs/*
+mlruns/*
+mlartifacts/*

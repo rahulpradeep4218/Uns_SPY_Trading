@@ -24,14 +24,7 @@ class MLFlowResource(ConfigurableResource):
     """
     MLflow as a resource for tracking experiments.
     """
-    tracking_uri: str
     experiment_name: str
-    def load(self):
-        """
-        loads mlflow from configuration
-        """
-        mlflow.set_tracking_uri(self.tracking_uri)
-        mlflow.set_experiment(self.experiment_name)
-        mlflow.set_tag("dagster", "trading_dagster")
-        return mlflow
-          
+    model_name: str
+    experiment_id: str = None
+    run_name: str = None

@@ -1,0 +1,21 @@
+all_data_path: '../data/SPY_AllData.xlsx'
+sheet_names: '1minData1-6-2022,1minData1-12-2023'
+train_start_date: '2023-01-01'
+train_end_date: '2023-01-31'
+test_start_date: '2023-02-01'
+test_end_date: '2023-02-28'
+model_name: 'xgboost_power'
+runs_folder: 'training_runs'
+parquet_viewer_link: 'http://localhost:8501/parquet_viewer'
+eval_metric: 'quantile'
+high_label_column: 'High_Label'
+low_label_column: 'Low_Label'
+test_size: 0.2
+random_state: 42
+qalpha_high: '0.25,0.9'
+qalpha_low: '0.25,0.9'
+num_boost_rounds: 20000
+num_trials: 100
+early_stopping_rounds: 300
+
+tracking_uri: 'file:///C:/Projects/Trading/Uns_SPY_Trading/mlruns'

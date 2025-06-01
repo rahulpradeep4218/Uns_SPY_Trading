@@ -14,11 +14,12 @@ def add_all_indicators(data, config, func_list=None):
         for func_name in func_list:
             func = globals().get(func_name)
             if callable(func):
-                data = func(data=data, config=config, column=config['indicator_column'])
+                data = func(data=data, config=config['parameters'], column=config['indicator_column'])
             else:
                 print(f"Function {func_name} is not found or not callable")
     else:
         print("No function list provided, adding all indicators.")
+    data.dropna(inplace=True)  # Drop rows with NaN values after adding indicators
     return data
 
 def add_bollinger_bands(data, config, column='Close'):
@@ -115,6 +116,7 @@ def add_momentum(data, config, column='Close'):
     config = config['momentum']
     mom_window = config['window']
     data['Momentum'] = data[column].pct_change(periods=mom_window) * 100
+    return data
 
 def add_MA(data, config, column='Close'):
     ma_periods = config['ma_periods']
@@ -136,3 +138,4 @@ def add_pivot(data, config, column='Close'):
     data['PVPTS1'] = (2 * data['PVPT']) - data['High']
     data['PVPTS2'] = data['PVPT'] - (data['High'] - data['Low'])
     data['PVPTS3'] = data['Low'] - 2 * (data['High'] - data['PVPT'])
+    return data

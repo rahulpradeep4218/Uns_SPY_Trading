@@ -26,6 +26,7 @@ def normalize_timegaps(df, time_gap_threshold=60):
             # Apply scaling to rows before p+1 (older data)
             df.loc[p + 1:, features] /= gap_percentage
 
+    df.drop(columns=['time_delta', 'time_gap_flag'], inplace=True)
     return df
 
 

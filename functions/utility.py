@@ -13,17 +13,31 @@ def save_df_parquet_link(df, config, run_id, filename, model_metadata={}):
     None
     """
     details_cfg = config['training_details']
-    first_directory = get_first_directory(config, model_metadata)
-    runs_folder = details_cfg['runs_folder']
-
     # Save the DataFrame to a Parquet file
-    file_path = os.path.join(f"../{runs_folder}", f'{first_directory}', f'Run_{run_id}', filename)
+    file_path = get_dagster_run_id_path(config, run_id, filename, model_metadata)
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     df.to_parquet(file_path, index=False)
-    file_path_viewer = f"{runs_folder}/{first_directory}/Run_{run_id}/{filename}"
+    file_path_viewer = get_file_viewer_link(config, run_id, filename, model_metadata)
     parquet_viewer_link = f'{details_cfg['parquet_viewer_link']}?file={file_path_viewer}'
     return parquet_viewer_link
 
+
+def get_dagster_runs_folder_path(config):
+    details_cfg = config['training_details']
+    runs_folder = details_cfg['runs_folder']
+    return f"../{runs_folder}"
+
+def get_dagster_run_id_path(config, run_id, filename, model_metadata={}):
+    first_directory = get_first_directory(config, model_metadata)
+    runs_folder = get_dagster_runs_folder_path(config)
+    return os.path.join(runs_folder, f'{first_directory}', f'Run_{run_id}', filename)
+
+def get_file_viewer_link(config, run_id, filename, model_metadata={}):
+    details_cfg = config['training_details']
+    runs_folder = details_cfg['runs_folder']
+    first_directory = get_first_directory(config, model_metadata)
+    file_path_viewer = f"{runs_folder}/{first_directory}/Run_{run_id}/{filename}"
+    return file_path_viewer
 
 def get_ma_columns(value):
     ma_columns = []
@@ -91,6 +105,6 @@ def generate_model_id(model_name):
 def get_first_directory(config, model_metadata):
     details_cfg = config['training_details']
     model_id = model_metadata.get('model_id', '')
-    start_date = details_cfg['start_date']
-    end_date = details_cfg['end_date']
+    start_date = details_cfg['train_start_date']
+    end_date = details_cfg['train_end_date']
     return f"{model_id}_{start_date}_{end_date}"

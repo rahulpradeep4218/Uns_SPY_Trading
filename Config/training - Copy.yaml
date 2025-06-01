@@ -1,0 +1,153 @@
+training_details:
+  all_data_path: '../data/SPY_AllData.xlsx'
+  sheet_names: '1minData1-6-2022,1minData1-12-2023'
+  train_start_date: '2023-01-01'
+  train_end_date: '2023-01-11'
+  test_start_date: '2023-02-01'
+  test_end_date: '2023-02-11'
+  model_name: 'xgboost_power'
+  runs_folder: 'training_runs'
+  parquet_viewer_link: 'http://localhost:8501/parquet_viewer'
+  eval_metric: 'quantile'
+  high_label_column: 'High_Label'
+  low_label_column: 'Low_Label'
+  test_size: 0.2
+  random_state: 42
+  qalpha_high: '0.25,0.9'
+  qalpha_low: '0.25,0.9'
+  num_boost_rounds: 20000
+  num_trials: 50
+  early_stopping_rounds: 300
+common_config:
+  normalize_timegap_threshold: 60
+  close_transform_columns: 'bolband,donchn,pivot,ma_20,ma_50,ma_100,ema_20'
+  num_bars_to_look_labels: 20
+  label_scaling_multiplier: 10000
+trade_parameters:
+  amount_per_trade: 10
+  trade_init_ratio_threshold: 3
+  trade_risk_ratio_threshold: 0.8
+mlflow:
+  experiment_name: 'xgboost_power'
+  tracking_uri: 'http://localhost:5000'
+scaling:
+  minmax:
+    columns: 'bolband,donchn,tchr,atr,volatility,momentum,pivot,ma_20,ma_50,ma_100,ema_20'
+  standard:
+    columns: ''
+  robust:
+    columns: ''
+training_parameters:
+  active_parameters: 'objective,tree_method,eval_metric,gamma,max_depth,learning_rate,subsample,colsample_bytree,min_child_weight,lambda,alpha'
+  base_parameters: 'objective,tree_method,eval_metric'
+  params_list:
+  - name: objective
+    type: str
+    hp: false
+    log: false
+    value: reg:quantileerror
+  - name: 'tree_method'
+    type: str
+    hp: false
+    log: false
+    value: hist
+  - name: eval_metric
+    type: str
+    hp: false
+    log: false
+    value: quantile
+  - name: 'gamma'
+    type: float
+    hp: true
+    log: false
+    min: 0.0
+    max: 10.0
+    value: 3.2
+  - name: 'max_depth'
+    type: int
+    hp: true
+    log: false
+    min: 3
+    max: 12
+    value: 6
+  - name: 'learning_rate'
+    type: float
+    hp: true
+    log: true
+    min: 0.001
+    max: 0.3
+  - name: 'subsample'
+    type: float
+    hp: true
+    log: false
+    min: 0.5
+    max: 1.0
+  - name: 'colsample_bytree'
+    type: float
+    hp: true
+    log: false
+    min: 0.5
+    max: 1.0
+  - name: 'min_child_weight'
+    type: float
+    hp: true
+    log: false
+    min: 1.0
+    max: 10.0
+  - name: 'lambda'
+    type: float
+    hp: true
+    log: false
+    min: 0.0
+    max: 10.0
+  - name: 'alpha'
+    type: float
+    hp: true
+    log: false
+    min: 0.0
+    max: 10.0
+indicators:
+  available: 
+    bolband,donchn,tchr,adwm,wasi,volume_ma,atr,fourier,volatility,momentum,pivot,ma_20,ma_50,ma_100,ema_20
+  selected: 
+    bolband,donchn,tchr,atr,fourier,volatility,momentum,pivot,ma_20,ma_50,ma_100,ema_20
+  indicator_column: Close
+  functions:
+    bolband: add_bollinger_bands
+    atr: calculate_ATR
+    donchn: add_donchian_bands
+    tchr: calculate_tchr
+    fourier: compute_fourier_df
+    volatility: add_volatility
+    momentum: add_momentum
+    pivot: add_pivot
+    ma: add_MA
+    ema: add_EMA
+  parameters:
+    bolband:
+      period: 20
+      width: 2
+      columns: BOLLBU,BOLLBL
+    atr:
+      ma: 20
+      period: 14
+      columns: ATR,ADJATR
+    donchn:
+      period: 20
+      columns: DONUP,DONLOW
+    tchr:
+      adj: 5
+      period: 100
+      range: highlow
+      retracement: long
+      columns: TCHR
+    fourier:
+      period: 50
+    volatility:
+      window: 14
+      columns: Volatility
+    momentum:
+      window: 10
+      columns: Momentum
+    pivot:
+      columns: PVPT,PVPTR1,PVPTR2,PVPTR3,PVPTS1,PVPTS2,PVPTS3

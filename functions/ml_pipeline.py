@@ -1,10 +1,14 @@
+from cProfile import label
+from math import exp
 from pdb import run
+from pyexpat import model
 from webbrowser import get
 from matplotlib.pyplot import sca
 from sklearn import base
 import mlflow
 import optuna
 import numpy as np
+import pandas as pd
 import os
 import pickle
 import json
@@ -16,7 +20,9 @@ from functions.transform import normalize_timegaps
 from functions.utility import (
     get_columns_mapping,
     save_df_parquet_link,
-    get_first_directory
+    get_first_directory,
+    get_file_viewer_link,
+    get_dagster_run_id_path
 )
 import xgboost as xgb
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
@@ -74,12 +80,13 @@ def add_indicators(df, config):
         cfg_parameters['ema_periods'] = ema_periods
     rest_functions = [cfg['functions'][indicator] for indicator in selected_indicators if not indicator.startswith(('ma_', 'ema_')) ]
     func_list.extend(rest_functions)
-    data_with_indicators = add_all_indicators(df, config=cfg_parameters, func_list=func_list)
+    data_with_indicators = add_all_indicators(df, config=cfg, func_list=func_list)
     return data_with_indicators, selected_indicators
 
 def close_diff_transform(df, config):
     cfg = config['common_config']
-    close_diff_features = cfg['close_transform_columns'].split(',')
+    #close_diff_features = cfg['close_transform_columns'].split(',')
+    close_diff_features = get_columns_mapping(cfg['close_transform_columns'], config)
     # Transform the 'Close' column
     df[close_diff_features] = df[close_diff_features].sub(df['Close'], axis=0).div(df['Close'], axis=0)
     return df, close_diff_features
@@ -91,9 +98,9 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
     
     scaled_data = df.copy()
 
-    minmax_features = scale_cfg['minmax']['columns'].split(',')
-    standard_features = scale_cfg['standard']['columns'].split(',')
-    robust_features = scale_cfg['robust']['columns'].split(',')
+    minmax_features = get_columns_mapping(scale_cfg['minmax']['columns'], config)
+    standard_features = get_columns_mapping(scale_cfg['standard']['columns'], config)
+    robust_features = get_columns_mapping(scale_cfg['robust']['columns'], config)
     minmax_scaler = MinMaxScaler()
     standard_scaler = StandardScaler()
     robust_scaler = RobustScaler()
@@ -173,7 +180,7 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
             "type": MetadataValue.md(train_or_test),
             "sample_tail": MetadataValue.md(scaled_data.tail().to_markdown()),
             "Parquet_Scaling_Link": MetadataValue.url(parq_link),
-            "scaler_file_path": MetadataValue.url(scaler_file_path),
+            "scaler_file_path": MetadataValue.url(scaler_path),
             "minmax_features": MetadataValue.text(", ".join(minmax_features)),
             "standard_features": MetadataValue.text(", ".join(standard_features)),
             "robust_features": MetadataValue.text(", ".join(robust_features)),
@@ -189,12 +196,14 @@ def quantile_loss(ytrue, y_pred, quantile):
 
 def add_labels_high_low(df, config):
     num_bars = config['num_bars_to_look_labels']
+    label_scaling_multiplier = config['label_scaling_multiplier']
     df['High_Label'] = df['High'].rolling(window=num_bars).max().shift(-num_bars+1)
     df['Low_Label'] = df['Low'].rolling(window=num_bars).min().shift(-num_bars+1)
     df['High_Label'] = df['High_Label'] - df['Close']
     df['Low_Label'] = df['Close'] - df['Low_Label']
-    df['High_Label'] = df['High_Label'] / df['Close'] * 10000
-    df['Low_Label'] = df['Low_Label'] / df['Close'] * 10000
+    df['High_Label'] = df['High_Label'] / df['Close'] * label_scaling_multiplier
+    df['Low_Label'] = df['Low_Label'] / df['Close'] * label_scaling_multiplier
+    df.dropna(inplace=True)
     return df
 
 def get_train_test_split(dfs, config, context, model_metadata, high_low=''):
@@ -242,7 +251,7 @@ def get_train_test_split(dfs, config, context, model_metadata, high_low=''):
     context.add_output_metadata(
         {
             "type": MetadataValue.md(high_low),
-            "test_size": MetadataValue.int(test_size),
+            "test_size": MetadataValue.float(test_size),
             "random_state": MetadataValue.int(random_state),
             "train_shape": MetadataValue.md(f"X_train: {X_train.shape}, y_train: {y_train.shape}"),
             "test_shape": MetadataValue.md(f"X_test: {X_test.shape}, y_test: {y_test.shape}"),
@@ -296,7 +305,8 @@ def get_base_param_dict(training_params_config):
 
 def get_trial_suggestion(trial, param_name, param_cfg):
     type = param_cfg['type']
-    value = param_cfg['value']
+    if type == 'str' or type == 'bool':
+        value = param_cfg['value']
     if type == 'float':
         return trial.suggest_float(param_name, param_cfg['min'], param_cfg['max'], log=param_cfg.get('log', False)) if param_cfg['hp'] else value
     elif type == 'int':
@@ -316,8 +326,8 @@ def get_objective(dtrain, dtest, y_test, q_alpha, config, eval_metric, num_boost
         cfg = config['training_parameters']
         active_params = cfg['active_parameters'].split(',')
         params = {
-            name: get_trial_suggestion(trial, name, param_cfg)
-            for name, param_cfg in cfg['params_list'].items() if name in active_params
+            param_cfg['name']: get_trial_suggestion(trial, param_cfg['name'], param_cfg)
+            for param_cfg in cfg['params_list'] if param_cfg['name'] in active_params
         }
         params['quantile_alpha'] = q_alpha
         base_params = get_base_param_dict(cfg)
@@ -335,8 +345,9 @@ def get_objective(dtrain, dtest, y_test, q_alpha, config, eval_metric, num_boost
                             )
         trial.set_user_attr("best_iteration", xgb_model.best_iteration)
         preds = xgb_model.predict(dtest)
-        loss1 = quantile_loss(y_test, preds[:, 0], q_alpha[0])
-        loss2 = quantile_loss(y_test, preds[:, 1], q_alpha[1])
+        y_test_values = y_test.values.ravel()  # Flatten the y_test array
+        loss1 = quantile_loss(y_test_values, preds[:, 0], q_alpha[0])
+        loss2 = quantile_loss(y_test_values, preds[:, 1], q_alpha[1])
         combined_score = np.mean([loss1, loss2])
         
         context.log.info(f"Trial {trial.number}: Best iteration = {xgb_model.best_iteration}, test rmse = {combined_score}")
@@ -345,12 +356,12 @@ def get_objective(dtrain, dtest, y_test, q_alpha, config, eval_metric, num_boost
     
     return objective
 
-def optimize_parameters(dmat_dict, config, context, model_metadata, high_low=''):
+def optimize_parameters(df_dict, config, context, model_metadata, high_low=''):
     """
     Optimize parameters using Optuna for quantile regression.
     
     Args:
-        dmat_dict (dict): Dictionary containing DMatrix objects for training and testing.
+        df_dict (dict): Dictionary containing DataFrames for training and testing.
         config (dict): Configuration dictionary.
         context: Dagster context for logging and metadata.
         high_low (str): Indicates whether to use 'high' or 'low' labels.
@@ -361,14 +372,17 @@ def optimize_parameters(dmat_dict, config, context, model_metadata, high_low='')
     num_boosting_rounds = config['training_details']['num_boost_rounds']
     eval_metric = config['training_details']['eval_metric']
     q_alpha = config['training_details'][f'qalpha_{high_low}'].split(',')
+    q_alpha = [float(alpha) for alpha in q_alpha]
+    dtrain = xgb.QuantileDMatrix(df_dict[f'X_train_{high_low}'], df_dict[f'y_train_{high_low}'])
+    dtest = xgb.QuantileDMatrix(df_dict[f'X_test_{high_low}'], df_dict[f'y_test_{high_low}'])
     
     objective = get_objective(
-        dtrain=dmat_dict[f'dtrain_{high_low}'], 
-        dtest=dmat_dict[f'dtest_{high_low}'], 
-        y_test=dmat_dict[f'y_test_{high_low}'], 
-        q_alpha=q_alpha, 
-        config=config, 
-        eval_metric=eval_metric, 
+        dtrain=dtrain,
+        dtest=dtest,
+        y_test=df_dict[f'y_test_{high_low}'],
+        q_alpha=q_alpha,
+        config=config,
+        eval_metric=eval_metric,
         num_boosting_rounds=num_boosting_rounds,
         context=context
     )
@@ -399,7 +413,7 @@ def optimize_parameters(dmat_dict, config, context, model_metadata, high_low='')
             "best_params": MetadataValue.md(str(best_params)),
             "q_alpha": MetadataValue.md(str(q_alpha)),
             "num_boosting_rounds": MetadataValue.int(num_boosting_rounds),
-            "eval_metric": MetadataValue.str(eval_metric),
+            "eval_metric": MetadataValue.md(str(eval_metric)),
             "best_params_file": MetadataValue.url(f"{runs_folder}/{first_directory}/{filename}"),
         }
     )
@@ -410,12 +424,30 @@ def optimize_parameters(dmat_dict, config, context, model_metadata, high_low='')
     }
     return output_dict
 
-def train_model(dmat_dict, params, config, context, high_low='', mlflow_resource=None):
+def get_other_non_hp_params(config):
+    """
+    Get the non-hyperparameter parameters from the configuration.
+    
+    Args:
+        config (dict): Configuration dictionary.
+    
+    Returns:
+        dict: Dictionary of non-hyperparameter parameters.
+    """
+    training_params_config = config['training_parameters']
+    active_params = training_params_config['active_parameters'].split(',')
+    hp_params = [param_cfg['name'] for param_cfg in training_params_config['params_list'] if param_cfg.get('hp', False)]
+    other_non_hp_params = {
+        param_cfg['name']: param_cfg['value'] for param_cfg in training_params_config['params_list'] if param_cfg['name'] not in hp_params and param_cfg['name'] in active_params
+    }
+    return other_non_hp_params
+
+def train_model(df_dict, params, config, context, high_low='', mlflow_resource_dict={}):
     """
     Train the XGBoost model using the optimized parameters.
     
     Args:
-        dmat_dict (dict): Dictionary containing DMatrix objects for training and testing.
+        df_dict (dict): Dictionary containing DataFrames for training and testing.
         config (dict): Configuration dictionary.
         context: Dagster context for logging and metadata.
         high_low (str): Indicates whether to use 'high' or 'low' labels.
@@ -423,41 +455,54 @@ def train_model(dmat_dict, params, config, context, high_low='', mlflow_resource
     Returns:
         xgb.Booster: Trained XGBoost model.
     """
+    parent_run_id = mlflow_resource_dict.get('parent_run_id', None)
+    exp_id = mlflow_resource_dict.get('experiment_id', None)
+    model_name = config['training_details']['model_name']
+
     best_params = params['best_params']
+    non_hp_params = get_other_non_hp_params(config)
+    best_params.update(non_hp_params)
+    quantile_alpha = config['training_details'][f'qalpha_{high_low}'].split(',')
+    quantile_alpha = [float(alpha) for alpha in quantile_alpha]
+    best_params['quantile_alpha'] = quantile_alpha
+    context.log.info(f"Training model {high_low} with parameters: {best_params}")
     best_iteration = params['best_iteration']
-    quantile_alpha = best_params['quantile_alpha']
+    dtrain = xgb.QuantileDMatrix(df_dict[f'X_train_{high_low}'], df_dict[f'y_train_{high_low}'])
+    dtest = xgb.QuantileDMatrix(df_dict[f'X_test_{high_low}'], df_dict[f'y_test_{high_low}'])
+    ytest = df_dict[f'y_test_{high_low}']
     if best_iteration is None:
         context.log.warning("Best iteration not found in parameters, using default num_boost_rounds.")
         best_iteration = config['training_details']['num_boost_rounds']
-    with mlflow_resource.start_run(run_name=f"XGBoost_Power_{high_low}") as run:
-        mlflow_resource.log_params(best_params)
+    with mlflow.start_run(run_name=f"{model_name}_run_{high_low}", nested=True, parent_run_id=parent_run_id, experiment_id=exp_id) as run:
+        mlflow.log_params(best_params)
         xgb_model = xgb.train(
             params=best_params,
-            dtrain=dmat_dict[f'dtrain_{high_low}'],
+            dtrain=dtrain,
             num_boost_round=best_iteration,
-            evals=[(dmat_dict[f'dtest_{high_low}'], 'test')],
+            evals=[(dtest, 'test')],
             verbose_eval=False
         )
-        preds = xgb_model.predict(dmat_dict[f'dtest_{high_low}'])
-        loss1 = quantile_loss(dmat_dict[f'y_test_{high_low}'], preds[:, 0], quantile_alpha[0])
-        loss2 = quantile_loss(dmat_dict[f'y_test_{high_low}'], preds[:, 1], quantile_alpha[1])
+        preds = xgb_model.predict(dtest)
+        y_test_values = ytest.values.ravel()  # Flatten the y_test array
+        loss1 = quantile_loss(y_test_values, preds[:, 0], quantile_alpha[0])
+        loss2 = quantile_loss(y_test_values, preds[:, 1], quantile_alpha[1])
         q_loss = np.mean([loss1, loss2])
         context.log.info(f"Quantile loss for {high_low} labels: {q_loss}")
-        mlflow_resource.log_metric(f'quantile_loss_{high_low}', q_loss)
-        mlflow_resource.log_metric('best_iteration', best_iteration)
-        mlflow_resource.xgboost.log_model(
+        mlflow.log_metric(f'quantile_loss_{high_low}', q_loss)
+        mlflow.log_metric('best_iteration', best_iteration)
+        mlflow.xgboost.log_model(
             xgb_model,
-            artifact_path=f"xgboost_model_power_{high_low}",
-            registered_model_name=f"XGBoost_Power_{high_low}"
+            artifact_path=f"{model_name}_{high_low}",
+            registered_model_name=f"{model_name}_{high_low}"
         )
         mlflow_run_id = run.info.run_id
         exp_id = run.info.experiment_id
-        tracking_url = mlflow_resource.get_tracking_uri()
+        tracking_url = mlflow.get_tracking_uri()
         mlflow_run_url = f"{tracking_url}/#/experiments/{exp_id}/runs/{mlflow_run_id}"
     context.add_output_metadata(
         {
             "mlflow_run_url": MetadataValue.url(mlflow_run_url),
-            "quantile_loss": MetadataValue.float(q_loss),
+            "quantile_loss": MetadataValue.float(float(q_loss)),
             "best_iteration": MetadataValue.int(best_iteration),
             "best_params": MetadataValue.md(str(best_params)),
             "quantile_alpha": MetadataValue.md(str(quantile_alpha)),
@@ -465,5 +510,144 @@ def train_model(dmat_dict, params, config, context, high_low='', mlflow_resource
     )
     
     context.log.info(f"Trained model for {high_low} labels with params : {best_params} and best iteration: {best_iteration}")
+    model_info = {
+        'mlflow_run_id': mlflow_run_id,
+        'exp_id': exp_id,
+        'tracking_url': tracking_url,
+        'mlflow_run_url': mlflow_run_url,
+        'model_name': f"XGBoost_Power_{high_low}",
+        'artifact_path': f"xgboost_model_power_{high_low}",
+        'model': xgb_model,
+    }
+    return model_info
+
+
+def get_model_evaluation(context, config, input_output_df_test:dict, models:dict, model_metadata, mlflow_resource, parent_run_id, original_data):
+    """
+    Evaluate the trained model using the test dataset.
     
-    return xgb_model
+    Args:
+        context: Dagster context for logging and metadata.
+        model: Trained XGBoost model.
+        dmat_dict (dict): Dictionary containing DMatrix objects for training and testing.
+        config (dict): Configuration dictionary.
+        high_low (str): Indicates whether to use 'high' or 'low' labels.
+    
+    Returns:
+        dict: Evaluation metrics for the model.
+    """
+    high_model_info = models['train_model_high']
+    low_model_info = models['train_model_low']
+    train_model_high = high_model_info['model']
+    train_model_low = low_model_info['model']
+
+    label_scaling_multiplier = config['common_config']['label_scaling_multiplier']
+    high_label = config['training_details']['high_label_column']
+    low_label = config['training_details']['low_label_column']
+    trade_init_ratio_threshold = config['trade_parameters']['trade_init_ratio_threshold']
+    trade_risk_ratio_threshold = config['trade_parameters']['trade_risk_ratio_threshold']
+
+    initial_columns = config['common_config']['initial_columns'].split(',')
+    init_columns_df = original_data[initial_columns]
+
+    test_df = input_output_df_test['input_df']
+    output_high_df = input_output_df_test['output_high_df']
+    output_low_df = input_output_df_test['output_low_df']
+    amount_per_trade = config['trade_parameters']['amount_per_trade']
+    quantile_dmatrix = xgb.QuantileDMatrix(test_df)
+    high_preds = train_model_high.predict(quantile_dmatrix)
+    low_preds = train_model_low.predict(quantile_dmatrix)
+    output_df = test_df.copy()
+    output_df = pd.concat([init_columns_df, output_df, output_high_df, output_low_df], axis=1)
+    output_df[high_label] = output_df[high_label] * output_df['Close'].values / label_scaling_multiplier
+    output_df[high_label] = output_df[high_label] + output_df['Close']
+    output_df[low_label] = output_df[low_label] * output_df['Close'].values / label_scaling_multiplier
+    output_df[low_label] = output_df['Close'] - output_df[low_label]
+    output_df['pred_sell_stop'] = high_preds[:, 1]
+    output_df['pred_buy_take'] = high_preds[:, 0]
+    output_df['pred_sell_take'] = low_preds[:, 1]
+    output_df['pred_buy_stop'] = low_preds[:, 0]
+    columns_to_update = ['pred_buy_stop', 'pred_buy_take', 'pred_sell_stop', 'pred_sell_take']
+    output_df[columns_to_update] = output_df[columns_to_update] * output_df['Close'].values[:, None] / label_scaling_multiplier
+    output_df['pred_sell_stop'] = output_df['pred_sell_stop'] + output_df['Close']
+    output_df['pred_buy_take'] = output_df['pred_buy_take'] + output_df['Close']
+    output_df['pred_sell_take'] = output_df['Close'] - output_df['pred_sell_take']
+    output_df['pred_buy_stop'] = output_df['Close'] - output_df['pred_buy_stop']
+
+    output_df['buy_risk_reward'] = (output_df['pred_buy_take'] - output_df['Close']) / (output_df['Close'] - output_df['pred_buy_stop'])
+    output_df['sell_risk_reward'] = (output_df['Close'] - output_df['pred_sell_take']) / (output_df['pred_sell_stop'] - output_df['Close'])
+
+    output_df['buy_sell_ratio'] = (output_df['pred_buy_take'] - output_df['Close']) / (output_df['Close'] - output_df['pred_sell_take'])
+    output_df['sell_buy_ratio'] = (output_df['Close'] - output_df['pred_sell_take']) / (output_df['pred_buy_take'] - output_df['Close'])
+
+    output_df['buy_signal'] = (output_df['buy_sell_ratio'] > trade_init_ratio_threshold) & (output_df['buy_risk_reward'] > trade_risk_ratio_threshold)
+    output_df['sell_signal'] = (output_df['sell_buy_ratio'] > trade_init_ratio_threshold) & (output_df['sell_risk_reward'] > trade_risk_ratio_threshold)
+    output_df['risk_reward'] = np.where(
+        output_df['buy_signal'], 
+        output_df['buy_risk_reward'], 
+        np.where(output_df['sell_signal'], output_df['sell_risk_reward'], 0)
+    )
+
+    cond1 = (output_df['buy_signal']) & (output_df[low_label] < output_df['pred_buy_stop'])
+    cond2 = (output_df['sell_signal']) & (output_df[high_label] > output_df['pred_sell_stop'])
+    cond3 = (output_df['buy_signal']) & (output_df[high_label] > output_df['pred_buy_take'])
+    cond4 = (output_df['sell_signal']) & (output_df[low_label] < output_df['pred_sell_take'])
+
+    output_df['win'] = np.select(
+        condlist=[cond1 | cond2, cond3 | cond4],
+        choicelist=[1, -1],  # 1 for win, -1 for loss
+        default=0  # 0 for no trade
+    )
+    output_df['win'] = output_df['win'].astype(int)
+    output_df['profit'] = np.where(
+        output_df['win'] == 1,
+        amount_per_trade,
+        np.where(output_df['win'] == -1, -amount_per_trade / output_df['risk_reward'], 0)
+    )
+
+    total_trades = output_df['win'].value_counts().get(1, 0) + output_df['win'].value_counts().get(-1, 0)
+    total_wins = output_df['win'].value_counts().get(1, 0)
+    total_losses = output_df['win'].value_counts().get(-1, 0)
+    win_percentage = (total_wins / total_trades * 100) if total_trades > 0 else 0
+    total_profit = output_df['profit'].sum()
+    parq_link = quick_save_parquet_link(
+        df=output_df,
+        config=config,
+        context=context,
+        filename='Model_Evaluation_Output',
+        model_metadata=model_metadata
+    )
+    run_ids = [high_model_info['mlflow_run_id'], low_model_info['mlflow_run_id']]
+    exp_id = mlflow_resource.experiment_id
+    dagster_run_id = context.run_id
+    artifact_path = get_dagster_run_id_path(
+        config=config,
+        run_id=dagster_run_id,
+        filename='Model_Evaluation_Output.parquet',
+        model_metadata=model_metadata
+    )
+
+    for run_id in run_ids:
+        with mlflow.start_run(run_id=run_id, experiment_id=exp_id, parent_run_id=parent_run_id, nested=True) as run:
+            mlflow.log_params({
+                'total_trades': total_trades,
+                'total_wins': total_wins,
+                'total_losses': total_losses,
+                'win_percentage': win_percentage,
+                'total_profit': total_profit
+            })
+            mlflow.log_artifact(artifact_path, artifact_path='evaluation_output')
+
+    context.add_output_metadata(
+        {
+            "total_trades": MetadataValue.int(int(total_trades)),
+            "total_wins": MetadataValue.int(int(total_wins)),
+            "total_losses": MetadataValue.int(int(total_losses)),
+            "win_percentage": MetadataValue.float(float(win_percentage)),
+            "total_profit": MetadataValue.float(float(total_profit)),
+            "sample_output_df": MetadataValue.md(output_df.head().to_markdown()),
+            "parquet_link": MetadataValue.url(parq_link),
+        }
+    )
+    return output_df
+
