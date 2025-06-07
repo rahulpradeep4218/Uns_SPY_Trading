@@ -1,16 +1,16 @@
 from dagster import asset, MetadataValue, MaterializeResult
 import pandas as pd
 
-from functions import transform
-from .resources import TrainingConfig, MLFlowResource
-from functions.utility import (
+from trading_functions.common import transform
+from resources import TrainingConfig, MLFlowResource
+from trading_functions.training.utility import (
     save_df_parquet_link, 
     generate_model_id, 
     get_first_directory,
     get_all_training_features
 )
 
-from functions.ml_pipeline import (
+from trading_functions.training.ml_pipeline import (
     get_filtered_data,
     quick_save_parquet_link,
     add_labels_high_low,

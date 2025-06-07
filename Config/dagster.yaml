@@ -1,0 +1,94 @@
+local_artifact_storage:
+  module: dagster.core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: /app/dagster_local_artifacts
+
+compute_logs:
+  module: dagster.core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir:
+      env: COMPUTE_LOGS_BASE_DIR
+
+run_launcher:
+  module: dagster_docker
+  class: DockerRunLauncher
+  config:
+    image: dagster_code_image
+    env_vars:
+      - DAGSTER_POSTGRES_USER
+      - DAGSTER_POSTGRES_PASSWORD
+      - DAGSTER_POSTGRES_DB
+      - DAGSTER_POSTGRES_HOST
+      - DAGSTER_POSTGRES_PORT
+      - LOCAL_ARTIFACTS_BASE_DIR
+      - COMPUTE_LOGS_BASE_DIR
+      - CONFIG_CONTAINER_PATH
+
+    network: app_network
+    container_kwargs:
+      auto_remove: true
+      volumes: # Make docker client accessible to any launched containers as well
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /tmp/io_manager_storage:/tmp/io_manager_storage
+        - uns_spy_trading_config_volume:/app/config  # Mount shared config.yaml
+        - uns_spy_trading_data_volume:/app/data  # Mount shared data volume
+        - uns_spy_trading_training_runs:/app/training_runs  # Mount shared training runs volume
+        - uns_spy_trading_dagster_local_artifacts:/app/dagster_local_artifacts  # Mount dagster local artifacts volume
+
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
+  config:
+    postgres_db:
+      hostname: postgres
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port:
+        env: DAGSTER_POSTGRES_PORT
+
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_db:
+      hostname: postgres
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port:
+        env: DAGSTER_POSTGRES_PORT
+
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_db:
+      hostname: postgres
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port:
+        env: DAGSTER_POSTGRES_PORT
+
+telemetry:
+  enabled: true
+
+run_monitoring:
+  enabled: true
+  poll_interval_seconds: 60
+
+schedules:
+  use_threads: true
+  num_workers: 8

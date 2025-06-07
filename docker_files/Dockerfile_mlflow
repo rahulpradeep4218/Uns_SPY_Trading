@@ -1,0 +1,24 @@
+# Dockerfile.mlflow
+FROM python:3.10-slim
+
+
+# Install MLflow and Postgres driver
+RUN pip install --no-cache-dir mlflow psycopg2-binary
+
+RUN apt-get update && apt-get install -y postgresql-client
+
+COPY ./sh/mlflow_entrypoint.sh /scripts/entrypoint.sh
+COPY ./dbscripts/init_dbs.sql /tmp/init_dbs.sql
+
+RUN chmod +x /scripts/entrypoint.sh
+# Create a directory for artifacts
+RUN mkdir -p /mlflow/artifacts
+
+# Set working directory
+WORKDIR /mlflow
+
+# Expose the MLflow port
+EXPOSE 5001
+
+# Default command
+CMD ["/scripts/entrypoint.sh"]

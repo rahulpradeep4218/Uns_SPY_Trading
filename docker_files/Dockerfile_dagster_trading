@@ -1,0 +1,57 @@
+FROM python:3.10-slim
+
+#Define Environment Variable
+ENV CODE_LOC=/opt/code
+
+RUN pip install \
+    dagster \
+    dagster-postgres \
+    dagster-docker \
+    numpy
+
+RUN pip install --upgrade pip
+
+# Install system packages required to build TA-Lib and Python packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libtool \
+    autoconf \
+    automake \
+    autotools-dev \
+    pkg-config \
+    wget \
+    git \
+    dpkg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and build TA-Lib from source
+
+COPY lib/ta-lib_0.6.4_arm64.deb /tmp/
+RUN dpkg -i /tmp/ta-lib_0.6.4_arm64.deb
+
+# Verify installation
+RUN echo "Detected architecture:" && dpkg --print-architecture
+
+# Set environment variables so Python TA-Lib wrapper can find the C library
+ENV LD_LIBRARY_PATH=/usr/lib
+ENV TA_INCLUDE_PATH=/usr/include
+ENV TA_LIBRARY_PATH=/usr/lib
+
+RUN pip install TA-Lib    
+#Install trading functions library
+WORKDIR /opt
+ARG DAGSTER_TRADING_FUNCTIONS_PATH
+COPY ${DAGSTER_TRADING_FUNCTIONS_PATH} /opt/trading_functions
+RUN pip install /opt/trading_functions
+
+# Add code location code
+RUN mkdir -p ${CODE_LOC}
+ARG DAGSTER_CODE_LOCATION
+COPY ./dagster_code ${CODE_LOC}/
+RUN pip install ${CODE_LOC}
+
+# Run dagster code server on port 4000
+EXPOSE 4000
+
+# CMD allows this to be overridden from run launchers or executors to execute runs and steps
+CMD dagster code-server start -h 0.0.0.0 -p ${DAGSTER_CODE_PORT} -f /opt/code/definitions.py

@@ -179,3 +179,4 @@ training_runs/*
 trading_dagster/training_runs/*
 mlruns/*
 mlartifacts/*
+pgdata/*
