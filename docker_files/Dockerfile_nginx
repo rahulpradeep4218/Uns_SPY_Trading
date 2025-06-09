@@ -1,0 +1,12 @@
+FROM nginx:alpine
+
+# Install Certbot and dependencies
+RUN apk add --no-cache certbot
+
+# Copy Nginx config
+COPY ./nginx/default.conf /default.conf
+COPY ./nginx/default-temp.conf /default-temp.conf
+COPY ./nginx/init-ssl.sh /init-ssl.sh
+RUN chmod +x /init-ssl.sh
+
+ENTRYPOINT ["/init-ssl.sh"]

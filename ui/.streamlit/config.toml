@@ -1,0 +1,5 @@
+[server]
+port = 8501
+enableCORS = True
+headless = True
+allowWebsocketOrigin = rahulpradeep.com

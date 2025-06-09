@@ -1,4 +1,61 @@
 services:
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_nginx
+    container_name: nginx
+    image: nginx_image
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/static:/usr/share/nginx/html:ro
+      - ./cert:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - oauth2_proxy
+      - streamlit
+      - dagster_webserver
+      - mlflow
+    networks:
+      - app_network
+
+  oauth2_proxy:
+    container_name: oauth2_proxy
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    environment:
+      OAUTH2_PROXY_PROVIDER: ${OAUTH2_PROXY_PROVIDER}
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET}
+      OAUTH2_PROXY_SCOPE: ${OAUTH2_PROXY_SCOPE}
+      OAUTH2_PROXY_HTTP_ADDRESS: ${OAUTH2_PROXY_HTTP_ADDRESS}
+      OAUTH2_PROXY_REDIRECT_URL: ${OAUTH2_PROXY_REDIRECT_URL}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
+      OAUTH2_PROXY_COOKIE_SECURE: ${OAUTH2_PROXY_COOKIE_SECURE}
+      OAUTH2_PROXY_SET_XAUTHREQUEST: ${OAUTH2_PROXY_SET_XAUTHREQUEST}
+      OAUTH2_PROXY_REVERSE_PROXY: ${OAUTH2_PROXY_REVERSE_PROXY}
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: ${OAUTH2_PROXY_SKIP_PROVIDER_BUTTON}
+      OAUTH2_PROXY_EMAIL_DOMAINS: ${OAUTH2_PROXY_EMAIL_DOMAINS}
+      OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE: ${OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE}
+    volumes:
+      - ./oauth2/allowed_emails:/allowed_emails:ro
+    networks:
+      - app_network
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_streamlit
+    container_name: streamlit_app
+    image: streamlit_app_image
+    expose:
+      - "8501"
+    volumes:
+      - config_volume:/app/config  # Mount shared config.yaml
+    networks:
+      - app_network
+
   postgres:
     image: postgres:11
     container_name: postgres
@@ -8,8 +65,7 @@ services:
       POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
       MLFLOW_POSTGRES_DB: ${MLFLOW_POSTGRES_DB}
       DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
+
     networks:
       - app_network
     healthcheck:
@@ -26,8 +82,7 @@ services:
       dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_mlflow
     container_name: mlflow_tracking
     image: mlflow_tracking_image
-    ports:
-      - "${MLFLOW_PORT}:${MLFLOW_PORT}"
+
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:${MLFLOW_PORT}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -57,8 +112,6 @@ services:
     container_name: dagster_code
     image: dagster_code_image    
     restart: always
-    ports:
-      - "4000:4000"
     environment:
       DAGSTER_POSTGRES_USER: ${POSTGRES_USER}
       DAGSTER_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -88,9 +141,8 @@ services:
     container_name: dagster_webserver
     expose:
       - '${DAGSTER_WEBSERVER_PORT}'
-    ports:
-      - '${DAGSTER_WEBSERVER_PORT}:${DAGSTER_WEBSERVER_PORT}'
     environment:
+      DAGSTER_WEBSERVER_PATH_PREFIX: ${DAGSTER_WEBSERVER_PATH_PREFIX}
       DAGSTER_POSTGRES_USER: ${POSTGRES_USER}
       DAGSTER_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
@@ -202,6 +254,9 @@ volumes:
       type: none
       device: ${PWD}/dagster_files/dagster_local_artifacts  # Your local folder for dagster artifacts
       o: bind
+
+  certbot_data:
+  certbot_www:
 
 networks:
   app_network:

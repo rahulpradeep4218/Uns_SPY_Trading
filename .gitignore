@@ -180,3 +180,7 @@ trading_dagster/training_runs/*
 mlruns/*
 mlartifacts/*
 pgdata/*
+mlflow_artifacts/*
+dagster_files/*
+cert/*
+oauth2/allowed_emails

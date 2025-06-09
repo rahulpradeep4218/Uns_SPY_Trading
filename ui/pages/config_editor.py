@@ -1,15 +1,13 @@
-from numpy import save
 import streamlit as st
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarfloat import ScalarFloat
 from pathlib import Path
 from streamlit import rerun
-from io import StringIO
 
 
-CONFIG_PATH = Path("Config/training.yaml")
-CONFIG_PATH2 = Path("Config/training2.yaml")
+
+CONFIG_PATH = Path("/app/config/config.yaml")
 yaml = YAML()
 yaml.preserve_quotes = True
 
