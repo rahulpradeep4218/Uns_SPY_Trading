@@ -1,11 +1,13 @@
+from webbrowser import get
 import mlflow
 import optuna
 import numpy as np
 import pandas as pd
 import os
-import pickle
+import yaml
 import json
 import xgboost as xgb
+import joblib
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 from trading_functions.common.indicators import add_all_indicators
@@ -84,10 +86,40 @@ def close_diff_transform(df, config):
     df[close_diff_features] = df[close_diff_features].sub(df['Close'], axis=0).div(df['Close'], axis=0)
     return df, close_diff_features
 
+def get_first_directory_with_runs_folder(config, model_metadata):
+    """
+    Get the first directory containing the 'runs' folder based on the configuration and model metadata.
+
+    Args:
+        config (dict): Configuration dictionary.
+        model_metadata (dict): Metadata dictionary for the model.
+
+    Returns:
+        str: Path to the first directory with a 'runs' folder.
+    """
+    runs_folder = config['training_details']['runs_folder']
+    first_directory = get_first_directory(config, model_metadata)
+    return os.path.join(runs_folder, first_directory)
+
+
+def get_scaler_path(config, model_metadata):
+    """
+    Get the path to the scaler file based on the configuration and model metadata.
+    
+    Args:
+        config (dict): Configuration dictionary.
+        model_metadata (dict): Metadata dictionary for the model.
+    
+    Returns:
+        str: Path to the scaler file.
+    """
+    first_direct_with_runs = get_first_directory_with_runs_folder(config, model_metadata)
+    scaler_file_path = os.path.join(f"{first_direct_with_runs}", "scalers.pkl")
+    return scaler_file_path
+
+
 def scale_features(df, config, context, model_metadata, train_or_test='train', scaler_path = ''):
     scale_cfg = config['scaling']
-    
-    first_directory = get_first_directory(config, model_metadata)
     
     scaled_data = df.copy()
 
@@ -126,19 +158,16 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
             'standard': standard_scaler,
             'robust': robust_scaler
         }
-        runs_folder = config['training_details']['runs_folder']
-        scaler_file_path = os.path.join(f"{runs_folder}", f'{first_directory}', "scalers.pkl")
+        scaler_file_path = get_scaler_path(config, model_metadata)
         os.makedirs(os.path.dirname(scaler_file_path), exist_ok=True)
-        with open(scaler_file_path, 'wb') as f:
-            pickle.dump(scalers, f)
-        context.log.info(f"Scalers saved to {scaler_file_path}")
+        joblib.dump(scalers, scaler_file_path)
+        context.log.info(f"Scalers saved to {scaler_file_path} using joblib")
     else:
         if scaler_path == '':
-            runs_folder = config['training_details']['runs_folder']
-            scaler_path = os.path.join(f"{runs_folder}", f'{first_directory}', "scalers.pkl")
-        
-        with open(scaler_path, 'rb') as f:
-            scalers = pickle.load(f)
+            scaler_path = get_scaler_path(config, model_metadata)
+
+
+        scalers = joblib.load(scaler_path)
         #minmax scaling
         if scalers['minmax'] is not None and len(minmax_features) > 0:
             context.log.info(f"Applying Transform Min-Max scaling to features: {minmax_features}")
@@ -435,7 +464,7 @@ def get_other_non_hp_params(config):
     }
     return other_non_hp_params
 
-def train_model(df_dict, params, config, context, high_low='', mlflow_resource_dict={}):
+def train_model(df_dict, params, config, context, model_metadata, high_low='', mlflow_resource_dict={}):
     """
     Train the XGBoost model using the optimized parameters.
     
@@ -451,7 +480,7 @@ def train_model(df_dict, params, config, context, high_low='', mlflow_resource_d
     parent_run_id = mlflow_resource_dict.get('parent_run_id', None)
     exp_id = mlflow_resource_dict.get('experiment_id', None)
     model_name = config['training_details']['model_name']
-
+    scaler_path = get_scaler_path(config, model_metadata)
     best_params = params['best_params']
     non_hp_params = get_other_non_hp_params(config)
     best_params.update(non_hp_params)
@@ -485,9 +514,18 @@ def train_model(df_dict, params, config, context, high_low='', mlflow_resource_d
         mlflow.log_metric('best_iteration', best_iteration)
         mlflow.xgboost.log_model(
             xgb_model,
-            artifact_path=f"{model_name}_{high_low}",
+            artifact_path="model",
             registered_model_name=f"{model_name}_{high_low}"
         )
+        mlflow.log_artifact(scaler_path, artifact_path='scalers')
+        context.log.info(f"Model {high_low} scalers logged from path: {scaler_path}")
+        
+        #Log config dictionary as an artifact
+        first_directory_with_runs = get_first_directory_with_runs_folder(config, model_metadata)
+        config_file_path = os.path.join(f"{first_directory_with_runs}", config['training_details']['mlflow_config_artifact_name'])
+        with open(config_file_path, 'w') as f:
+            yaml.dump(config, f)
+        mlflow.log_artifact(config_file_path, artifact_path='config')
         mlflow_run_id = run.info.run_id
         exp_id = run.info.experiment_id
         tracking_url = mlflow.get_tracking_uri()
