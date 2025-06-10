@@ -7,7 +7,7 @@ training_details:
   test_end_date: '2023-02-11'
   model_name: 'xgboost_power'
   runs_folder: '/app/training_runs'
-  parquet_viewer_link: 'http://localhost:8501/parquet_viewer'
+  parquet_viewer_link: 'https://rahulpradeep.com/trading/ui/parquet_viewer'
   eval_metric: 'quantile'
   high_label_column: 'High_Label'
   low_label_column: 'Low_Label'
