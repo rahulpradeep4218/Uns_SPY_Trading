@@ -36,6 +36,7 @@ run_launcher:
         - uns_spy_trading_data_volume:/app/data  # Mount shared data volume
         - uns_spy_trading_training_runs:/app/training_runs  # Mount shared training runs volume
         - uns_spy_trading_dagster_local_artifacts:/app/dagster_local_artifacts  # Mount dagster local artifacts volume
+        - uns_spy_trading_mlflow_artifacts:/mlflow/artifacts # Mount MLflow artifacts volume
 
 run_storage:
   module: dagster_postgres.run_storage

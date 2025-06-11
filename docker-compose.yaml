@@ -49,10 +49,13 @@ services:
       dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_streamlit
     container_name: streamlit_app
     image: streamlit_app_image
+    environment:
+      CONFIG_CONTAINER_PATH: ${CONFIG_CONTAINER_PATH}
     expose:
       - "8501"
     volumes:
       - config_volume:/app/config  # Mount shared config.yaml
+      - training_runs:/app/training_runs  # Mount shared training runs volume
     networks:
       - app_network
 

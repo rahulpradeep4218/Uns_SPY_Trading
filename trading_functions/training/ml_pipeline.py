@@ -1,5 +1,7 @@
+from weakref import ref
 from webbrowser import get
 import mlflow
+from mlflow.models import infer_signature
 import optuna
 import numpy as np
 import pandas as pd
@@ -396,7 +398,7 @@ def optimize_parameters(df_dict, config, context, model_metadata, high_low=''):
     q_alpha = config['training_details'][f'qalpha_{high_low}'].split(',')
     q_alpha = [float(alpha) for alpha in q_alpha]
     dtrain = xgb.QuantileDMatrix(df_dict[f'X_train_{high_low}'], df_dict[f'y_train_{high_low}'])
-    dtest = xgb.QuantileDMatrix(df_dict[f'X_test_{high_low}'], df_dict[f'y_test_{high_low}'])
+    dtest = xgb.QuantileDMatrix(df_dict[f'X_test_{high_low}'], df_dict[f'y_test_{high_low}'], ref=dtrain)
     
     objective = get_objective(
         dtrain=dtrain,
@@ -490,8 +492,9 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
     context.log.info(f"Training model {high_low} with parameters: {best_params}")
     best_iteration = params['best_iteration']
     dtrain = xgb.QuantileDMatrix(df_dict[f'X_train_{high_low}'], df_dict[f'y_train_{high_low}'])
-    dtest = xgb.QuantileDMatrix(df_dict[f'X_test_{high_low}'], df_dict[f'y_test_{high_low}'])
+    dtest = xgb.QuantileDMatrix(df_dict[f'X_test_{high_low}'], df_dict[f'y_test_{high_low}'], ref=dtrain)
     ytest = df_dict[f'y_test_{high_low}']
+    Xtest = df_dict[f'X_test_{high_low}']
     if best_iteration is None:
         context.log.warning("Best iteration not found in parameters, using default num_boost_rounds.")
         best_iteration = config['training_details']['num_boost_rounds']
@@ -505,6 +508,9 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
             verbose_eval=False
         )
         preds = xgb_model.predict(dtest)
+        input_example = Xtest.iloc[:5]
+        preds_example = preds[:5]
+        signature = infer_signature(input_example, preds_example)
         y_test_values = ytest.values.ravel()  # Flatten the y_test array
         loss1 = quantile_loss(y_test_values, preds[:, 0], quantile_alpha[0])
         loss2 = quantile_loss(y_test_values, preds[:, 1], quantile_alpha[1])
@@ -514,7 +520,9 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
         mlflow.log_metric('best_iteration', best_iteration)
         mlflow.xgboost.log_model(
             xgb_model,
-            artifact_path="model",
+            name="quantile_model",
+            signature=signature,
+            input_example=input_example,
             registered_model_name=f"{model_name}_{high_low}"
         )
         mlflow.log_artifact(scaler_path, artifact_path='scalers')
@@ -525,6 +533,7 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
         config_file_path = os.path.join(f"{first_directory_with_runs}", config['training_details']['mlflow_config_artifact_name'])
         with open(config_file_path, 'w') as f:
             yaml.dump(config, f)
+        context.log.info(f"Config file saved to {config_file_path} , and artifact uri : {run.info.artifact_uri}")
         mlflow.log_artifact(config_file_path, artifact_path='config')
         mlflow_run_id = run.info.run_id
         exp_id = run.info.experiment_id

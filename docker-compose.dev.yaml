@@ -6,11 +6,16 @@ services:
       context: .
       dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_streamlit
     container_name: streamlit_app
+    environment:
+      CONFIG_CONTAINER_PATH: ${CONFIG_CONTAINER_PATH}
     image: streamlit_app_image
+    ports:
+      - "8501:8501"  # Expose Streamlit port
     expose:
       - "8501"
     volumes:
       - config_volume:/app/config  # Mount shared config.yaml
+      - training_runs:/app/training_runs  # Mount shared training runs volume
     networks:
       - app_network
 
@@ -171,49 +176,49 @@ volumes:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/dagster_files  # Your local folder for dagster files
+      device: ${WORKING_DIRECTORY}/dagster_files  # Your local folder for dagster files
       o: bind
 
   pgdata:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/pgdata  # Your local folder for PostgreSQL data
+      device: ${WORKING_DIRECTORY}/pgdata  # Your local folder for PostgreSQL data
       o: bind
 
   config_volume:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/Config  # Your local folder containing config.yaml
+      device: ${WORKING_DIRECTORY}/Config  # Your local folder containing config.yaml
       o: bind
-    
+
   data_volume:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/data  # Your local folder for data storage
+      device: ${WORKING_DIRECTORY}/data  # Your local folder for data storage
       o: bind
 
   training_runs:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/training_runs  # Your local folder for training runs
+      device: ${WORKING_DIRECTORY}/training_runs  # Your local folder for training runs
       o: bind
 
   mlflow_artifacts:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/mlflow_artifacts  # Your local folder for MLflow artifacts
+      device: ${WORKING_DIRECTORY}/mlflow_artifacts  # Your local folder for MLflow artifacts
       o: bind
 
   dagster_local_artifacts:
     driver: local
     driver_opts:
       type: none
-      device: ${PWD}/dagster_files/dagster_local_artifacts  # Your local folder for dagster artifacts
+      device: ${WORKING_DIRECTORY}/dagster_files/dagster_local_artifacts  # Your local folder for dagster artifacts
       o: bind
 
   certbot_data:

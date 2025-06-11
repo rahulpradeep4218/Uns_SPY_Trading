@@ -499,7 +499,7 @@ def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_res
 
 
 @asset
-def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_high_model: dict, hyperparameter_tuning_high: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource) -> dict:
+def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_high_model: dict, hyperparameter_tuning_high: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource, model_metadata) -> dict:
     """
     Train the buy model using the best hyperparameters.
     
@@ -522,6 +522,7 @@ def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_hi
         params=hyperparameter_tuning_high,
         config=conf, 
         context=context, 
+        model_metadata=model_metadata,
         high_low='high',
         mlflow_resource_dict=mlflow_resource_dict
     )
@@ -530,7 +531,7 @@ def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_hi
 
 
 @asset
-def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low_model: dict, hyperparameter_tuning_low: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource) -> dict:
+def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low_model: dict, hyperparameter_tuning_low: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource, model_metadata) -> dict:
     """
     Train the sell model using the best hyperparameters.
     
@@ -554,6 +555,7 @@ def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low
         params=hyperparameter_tuning_low,
         config=conf, 
         context=context, 
+        model_metadata=model_metadata,
         high_low='low',
         mlflow_resource_dict=mlflow_resource_dict
     )
@@ -706,7 +708,7 @@ def add_labels_test(context, close_diff_transform_test: pd.DataFrame, training_c
 
 
 @asset
-def scale_data_test(context, add_labels_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
+def scale_data_test(context, add_labels_test: pd.DataFrame, scale_data_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Scale the test data using Min-Max scaling.
     

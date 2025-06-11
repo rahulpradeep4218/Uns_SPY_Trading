@@ -4,10 +4,11 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarfloat import ScalarFloat
 from pathlib import Path
 from streamlit import rerun
+import os
 
 
-
-CONFIG_PATH = Path("/app/config/config.yaml")
+config_path_env = os.getenv('CONFIG_CONTAINER_PATH', '/app/config.yaml')
+CONFIG_PATH = Path(config_path_env)
 yaml = YAML()
 yaml.preserve_quotes = True
 
