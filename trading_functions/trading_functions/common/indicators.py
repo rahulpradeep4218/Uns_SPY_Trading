@@ -1,7 +1,7 @@
 import talib
 import numpy as np
 
-def add_all_indicators(data, config, func_list=None):
+def add_all_indicators(data, config):
     """
     Add all indicators to the data DataFrame.
     Args:
@@ -10,17 +10,35 @@ def add_all_indicators(data, config, func_list=None):
     Returns:
         pd.DataFrame: DataFrame with added indicators.
     """
+    cfg = config['indicators']
+    selected_indicators = cfg['selected'].split(",")
+    ma_periods = [int(maperiod[3:]) for maperiod in selected_indicators if maperiod.startswith('ma_')]
+    ema_periods = [int(maperiod[4:]) for maperiod in selected_indicators if maperiod.startswith('ema_')]
+    cfg_parameters = cfg['parameters']
+    # Add all indicators to the data
+    func_list = []
+    if len(ma_periods) > 0:
+        func_list.append(cfg['functions']['ma'])
+        cfg_parameters['ma_periods'] = ma_periods
+    if len(ema_periods) > 0:
+        func_list.append(cfg['functions']['ema'])
+        cfg_parameters['ema_periods'] = ema_periods
+    rest_functions = [cfg['functions'][indicator] for indicator in selected_indicators if not indicator.startswith(('ma_', 'ema_')) ]
+    func_list.extend(rest_functions)
+
     if func_list:
         for func_name in func_list:
             func = globals().get(func_name)
             if callable(func):
-                data = func(data=data, config=config['parameters'], column=config['indicator_column'])
+                data = func(data=data, config=cfg['parameters'], column=cfg['indicator_column'])
             else:
                 print(f"Function {func_name} is not found or not callable")
     else:
         print("No function list provided, adding all indicators.")
     data.dropna(inplace=True)  # Drop rows with NaN values after adding indicators
-    return data
+    return data, selected_indicators
+
+
 
 def add_bollinger_bands(data, config, column='Close'):
     config = config['bolband']

@@ -1,7 +1,8 @@
 from dagster import asset, MetadataValue, MaterializeResult
 import pandas as pd
 
-from trading_functions.common import transform
+from trading_functions.common.transform import normalize_timegaps, close_diff_transform
+from trading_functions.common.indicators import add_all_indicators
 from resources import TrainingConfig, MLFlowResource
 from trading_functions.training.utility import (
     save_df_parquet_link, 
@@ -18,9 +19,6 @@ from trading_functions.training.ml_pipeline import (
     get_quantile_dmatrix,
     optimize_parameters,
     train_model,
-    add_indicators,
-    close_diff_transform,
-    normalize_timegaps_transform,
     scale_features,
     get_model_evaluation
 )
@@ -168,7 +166,7 @@ def normalize_timegaps_training(context, training_data: pd.DataFrame, training_c
         pd.DataFrame: DataFrame with normalized time gaps.
     """
     conf = training_config.load()
-    normalized_data = normalize_timegaps_transform(
+    normalized_data = normalize_timegaps(
         df=training_data,
         config=conf,
     ) 
@@ -205,8 +203,8 @@ def add_indicators_training(context, normalize_timegaps_training: pd.DataFrame, 
         pd.DataFrame: DataFrame with added indicators.
     """
     conf = training_config.load()
-    data_with_indicators, selected_indicators = add_indicators(df=normalize_timegaps_training, config=conf)
-    
+    data_with_indicators, selected_indicators = add_all_indicators(data=normalize_timegaps_training, config=conf)
+
     # Log the number of rows in the data with indicators
     row_count = data_with_indicators.shape[0]
     column_count = data_with_indicators.shape[1]
@@ -574,7 +572,7 @@ def normalize_timegaps_test(context, test_data: pd.DataFrame, training_config: T
         pd.DataFrame: DataFrame with normalized time gaps.
     """
     conf = training_config.load()
-    normalized_data = normalize_timegaps_transform(
+    normalized_data = normalize_timegaps(
         df=test_data,
         config=conf,
     ) 
@@ -609,7 +607,7 @@ def add_indicators_test(context, normalize_timegaps_test: pd.DataFrame, training
         pd.DataFrame: DataFrame with added indicators.
     """
     conf = training_config.load()
-    data_with_indicators, selected_indicators = add_indicators(df=normalize_timegaps_test, config=conf)
+    data_with_indicators, selected_indicators = add_all_indicators(data=normalize_timegaps_test, config=conf)
     
     # Log the number of rows in the data with indicators
     row_count = data_with_indicators.shape[0]

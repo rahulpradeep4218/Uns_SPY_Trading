@@ -1,5 +1,3 @@
-from weakref import ref
-from webbrowser import get
 import mlflow
 from mlflow.models import infer_signature
 import optuna
@@ -12,8 +10,7 @@ import xgboost as xgb
 import joblib
 from sklearn.model_selection import train_test_split
 from pathlib import Path
-from trading_functions.common.indicators import add_all_indicators
-from trading_functions.common.transform import normalize_timegaps
+from trading_functions.common.data import type_dict
 from trading_functions.training.utility import (
     get_columns_mapping,
     save_df_parquet_link,
@@ -26,13 +23,6 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
                                
 from dagster import MetadataValue
 
-
-type_dict = {
-    'int': int,
-    'float': float,
-    'str': str,
-    'bool': bool
-}
 
 def quick_save_parquet_link(df, config, context, filename, model_metadata=None):
     run_id = context.run_id
@@ -53,40 +43,6 @@ def get_filtered_data(df, start_date_str, end_date_str):
     filtered_data = filtered_data.reset_index(drop=True)
     return filtered_data
 
-def normalize_timegaps_transform(df, config):
-    cfg = config['common_config']
-    time_gap_threshold = cfg['normalize_timegap_threshold']
-    # Normalize time gaps
-    normalized_data = normalize_timegaps(df, time_gap_threshold)
-    return normalized_data
-
-
-def add_indicators(df, config):
-    cfg = config['indicators']
-    selected_indicators = cfg['selected'].split(",")
-    ma_periods = [int(maperiod[3:]) for maperiod in selected_indicators if maperiod.startswith('ma_')]
-    ema_periods = [int(maperiod[4:]) for maperiod in selected_indicators if maperiod.startswith('ema_')]
-    cfg_parameters = cfg['parameters']
-    # Add all indicators to the data
-    func_list = []
-    if len(ma_periods) > 0:
-        func_list.append(cfg['functions']['ma'])
-        cfg_parameters['ma_periods'] = ma_periods
-    if len(ema_periods) > 0:
-        func_list.append(cfg['functions']['ema'])
-        cfg_parameters['ema_periods'] = ema_periods
-    rest_functions = [cfg['functions'][indicator] for indicator in selected_indicators if not indicator.startswith(('ma_', 'ema_')) ]
-    func_list.extend(rest_functions)
-    data_with_indicators = add_all_indicators(df, config=cfg, func_list=func_list)
-    return data_with_indicators, selected_indicators
-
-def close_diff_transform(df, config):
-    cfg = config['common_config']
-    #close_diff_features = cfg['close_transform_columns'].split(',')
-    close_diff_features = get_columns_mapping(cfg['close_transform_columns'], config)
-    # Transform the 'Close' column
-    df[close_diff_features] = df[close_diff_features].sub(df['Close'], axis=0).div(df['Close'], axis=0)
-    return df, close_diff_features
 
 def get_first_directory_with_runs_folder(config, model_metadata):
     """

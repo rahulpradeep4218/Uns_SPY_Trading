@@ -41,7 +41,7 @@ RUN pip install TA-Lib
 #Install trading functions library
 WORKDIR /opt
 ARG DAGSTER_TRADING_FUNCTIONS_PATH
-COPY ${DAGSTER_TRADING_FUNCTIONS_PATH} /opt/trading_functions
+COPY ${DAGSTER_TRADING_FUNCTIONS_PATH} /opt
 RUN pip install /opt/trading_functions
 
 # Add code location code

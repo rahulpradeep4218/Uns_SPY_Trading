@@ -1,6 +1,9 @@
 from sklearn.preprocessing import MinMaxScaler
+from trading_functions.training.utility import get_columns_mapping
 
-def normalize_timegaps(df, time_gap_threshold=60):
+def normalize_timegaps(df, config):
+    cfg = config['common_config']
+    time_gap_threshold = cfg['normalize_timegap_threshold']
     df = df.copy()
     features = ['Open', 'High', 'Low', 'Close']
 
@@ -30,10 +33,13 @@ def normalize_timegaps(df, time_gap_threshold=60):
     return df
 
 
-def close_diff_transform(df, config, close_column='Close'):
-    close_diff_features = config['Close_Diff_Features'].split(',')
-    df[close_diff_features] = df[close_diff_features].sub(df[close_column], axis=0).div(df[close_column], axis=0)
-    return df
+def close_diff_transform(df, config):
+    cfg = config['common_config']
+    #close_diff_features = cfg['close_transform_columns'].split(',')
+    close_diff_features = get_columns_mapping(cfg['close_transform_columns'], config)
+    # Transform the 'Close' column
+    df[close_diff_features] = df[close_diff_features].sub(df['Close'], axis=0).div(df['Close'], axis=0)
+    return df, close_diff_features
 
 
 def min_max_scaling(df, inference=True, scaler=None, config=None):
