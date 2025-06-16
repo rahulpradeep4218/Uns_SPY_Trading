@@ -474,14 +474,7 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
         context.log.info(f"Quantile loss for {high_low} labels: {q_loss}")
         mlflow.log_metric(f'quantile_loss_{high_low}', q_loss)
         mlflow.log_metric('best_iteration', best_iteration)
-        mlflow.xgboost.log_model(
-            xgb_model,
-            name="quantile_model",
-            signature=signature,
-            input_example=input_example,
-            registered_model_name=f"{model_name}_{high_low}"
-        )
-        mlflow.log_artifact(scaler_path, artifact_path='scalers')
+        mlflow.log_artifact(scaler_path, artifact_path='model')
         context.log.info(f"Model {high_low} scalers logged from path: {scaler_path}")
         
         #Log config dictionary as an artifact
@@ -490,7 +483,16 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
         with open(config_file_path, 'w') as f:
             yaml.dump(config, f)
         context.log.info(f"Config file saved to {config_file_path} , and artifact uri : {run.info.artifact_uri}")
-        mlflow.log_artifact(config_file_path, artifact_path='config')
+        mlflow.log_artifact(config_file_path, artifact_path='model')
+        
+        mlflow.xgboost.log_model(
+            xgb_model,
+            name="model",
+            signature=signature,
+            input_example=input_example,
+            registered_model_name=f"{model_name}_{high_low}"
+        )
+        
         mlflow_run_id = run.info.run_id
         exp_id = run.info.experiment_id
         tracking_url = mlflow.get_tracking_uri()

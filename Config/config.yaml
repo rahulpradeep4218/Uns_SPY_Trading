@@ -36,7 +36,7 @@ mlflow:
   high_model_name: 'xgboost_power_high'
   low_model_name: 'xgboost_power_low'
   scaler_artifact_path: 'scalers'
-  scaler_artifact_download_path: 'C:/Projects/Trading/Uns_SPY_Trading/scalers'
+  artifact_download_path: 'C:/Projects/Trading/Uns_SPY_Trading/local_artifacts'
 
 scaling:
   minmax:

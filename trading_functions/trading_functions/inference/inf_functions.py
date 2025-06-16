@@ -1,13 +1,18 @@
 from pyexpat import model
+
+from torch import mode
+
 from trading_functions.training.utility import get_columns_mapping
 from trading_functions.common.logging_config import logger
 from trading_functions.common.transform import normalize_timegaps, close_diff_transform
 from trading_functions.common.indicators import add_all_indicators
 import mlflow
+from mlflow.tracking import MlflowClient
 import os
 import shutil
 import joblib
 import pandas as pd
+import yaml
 
 def scale_for_inference(data, config, scalers):
     scale_cfg = config['scaling']
@@ -35,7 +40,9 @@ def scale_for_inference(data, config, scalers):
         logger.debug("No Robust scaler found or no features to scale.")
 
 
-def download_scalers_artifact(config, dev=False, mlflow_uri=None):
+def download_artifacts(config, dev=False, mlflow_uri=None):
+    ml_client = MlflowClient()
+
     if mlflow_uri:
         logger.info(f"Setting MLflow tracking URI to {mlflow_uri}")
         mlflow.set_tracking_uri(mlflow_uri)
@@ -43,13 +50,19 @@ def download_scalers_artifact(config, dev=False, mlflow_uri=None):
         logger.info("Using default MLflow tracking URI from config.")
         mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
     high_model_name = config['mlflow']['high_model_name']
-    low_model_name = config['mlflow']['low_model_name']
     alias = 'dev' if dev else 'prod'
-    artifact_download_path = config['mlflow']['scaler_artifact_download_path']
-    model_uri_high = f"models:/{high_model_name}@{alias}"
-    model_uri_low = f"models:/{low_model_name}@{alias}"
-    scalers_high_artifact_uri = f"{model_uri_high}/{config['mlflow']['scaler_artifact_path']}"
-    logger.info(f"Downloading scalers from {scalers_high_artifact_uri}")
+    logger.info(f"Using model alias: {alias} for model: {high_model_name}")
+    artifact_download_path = config['mlflow']['artifact_download_path']
+
+    mv_alias = ml_client.get_model_version_by_alias(
+        name=high_model_name, 
+        alias=alias
+    )
+    run_id = mv_alias.run_id
+    scaler_artifact_uri = f"runs:/{run_id}/model/scalers.pkl"
+    config_artifact_uri = f"runs:/{run_id}/model/{config['training_details']['mlflow_config_artifact_name']}"
+    logger.info(f"scaler artifact_uri: {scaler_artifact_uri}")
+    logger.info(f"config artifact_uri: {config_artifact_uri}")
 
     # If scaler local download directory already exist, delete it
     if os.path.exists(artifact_download_path):
@@ -58,16 +71,26 @@ def download_scalers_artifact(config, dev=False, mlflow_uri=None):
     os.makedirs(artifact_download_path, exist_ok=True)
 
     #Download scalers
-
-    local_path = mlflow.artifacts.download_artifacts(
-        artifact_uri=scalers_high_artifact_uri, 
+    scaler_local_path = mlflow.artifacts.download_artifacts(
+        artifact_uri=scaler_artifact_uri, 
         dst_path=artifact_download_path
     )
-    logger.info(f"Scalers downloaded to {local_path}")
-    
-    scalers = joblib.load(local_path)
+    logger.info(f"Scalers downloaded to {scaler_local_path}")
+
+    scalers = joblib.load(scaler_local_path)
     logger.info(f"Scalers loaded: {scalers.keys()}")
-    return scalers
+
+    #Download config
+    config_local_path = mlflow.artifacts.download_artifacts(
+        artifact_uri=config_artifact_uri, 
+        dst_path=artifact_download_path
+    )
+    with open(config_local_path, 'r') as file:
+        model_config = yaml.safe_load(file)
+
+    logger.info(f"Config downloaded to {config_local_path}")
+
+    return scalers, model_config
 
 def transform_for_inference(data, config, scalers):
     """

@@ -4,3 +4,5 @@ numpy
 duckdb
 ruamel.yaml
 pathlib
+lightweight-charts
+dash-bootstrap-components
