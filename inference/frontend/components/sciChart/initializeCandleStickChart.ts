@@ -86,26 +86,38 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
             autoRange: EAutoRange.Always,
         })
     );
+    const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+    const res = await fetch(`${inf_url}/api/trades/random_candles`)
+    const ohlcData = await res.json();
 
-    const day = 24 * 60 * 60;
-    const startDate = new Date(Date.now() - 300 * day);
-    const { xValues, openValues, highValues, lowValues, closeValues } = ExampleDataProvider.getRandomOHLCVData(
-        300,
-        1.5,
-        startDate,
-        day
-    );
+    // const day = 24 * 60 * 60;
+    // const startDate = new Date(Date.now() - 300 * day);
+    // const { xValues, openValues, highValues, lowValues, closeValues } = ExampleDataProvider.getRandomOHLCVData(
+    //     300,
+    //     1.5,
+    //     startDate,
+    //     day
+    // );
 
-    // Create and add the Candlestick series
-    // The Candlestick Series requires a special dataseries type called OhlcDataSeries with o,h,l,c and date values
+    // // Create and add the Candlestick series
+    // // The Candlestick Series requires a special dataseries type called OhlcDataSeries with o,h,l,c and date values
+    // const candleDataSeries = new OhlcDataSeries(wasmContext, {
+    //     xValues,
+    //     openValues,
+    //     highValues,
+    //     lowValues,
+    //     closeValues,
+    //     dataSeriesName: "BTC/USDT",
+    // });
     const candleDataSeries = new OhlcDataSeries(wasmContext, {
-        xValues,
-        openValues,
-        highValues,
-        lowValues,
-        closeValues,
-        dataSeriesName: "BTC/USDT",
+        xValues: ohlcData.xValues,
+        openValues: ohlcData.openValues,
+        highValues: ohlcData.highValues,
+        lowValues: ohlcData.lowValues,
+        closeValues: ohlcData.closeValues,
+        dataSeriesName: "Rahul Random Candles",
     });
+
     const candlestickSeries = new FastCandlestickRenderableSeries(wasmContext, {
         id: "Candles",
         dataSeries: candleDataSeries,
@@ -148,6 +160,11 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         new CreateTradeMarkerModifier({ id: "marker" }),
         new CreateLineAnnotationModifier({ id: "line" }),
         new CreateHorizontalLineModifier({ id: "horline" }),
+        new CursorModifier({
+            crosshairStroke: appTheme.MutedOrange,
+            axisLabelFill: appTheme.VividOrange,
+            tooltipLegendTemplate: getTooltipLegendTemplate,
+        }),
     );
     sciChartSurface.chartModifiers.getById("marker").isEnabled = false;
     sciChartSurface.chartModifiers.getById("line").isEnabled = false;
@@ -188,6 +205,7 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         }
     };
 
+
     const setChartMode = (mode: string) => {
         sciChartSurface.chartModifiers.getById("marker").isEnabled = mode === "marker";
         sciChartSurface.chartModifiers.getById("line").isEnabled = mode === "line";
@@ -205,7 +223,7 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
     const resetChart = () => {
         sciChartSurface.annotations.clear(true);
         // Zoom to the latest 100 candles
-        xAxis.visibleRange = new NumberRange(xValues.length - 100, xValues.length - 1);
+        xAxis.visibleRange = new NumberRange(ohlcData.xValues.length - 100, ohlcData.xValues.length - 1);
     };
 
     resetChart();
@@ -216,3 +234,26 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         controls: { getDefinition, applyDefinition, resetChart, setChartMode },
     };
 };    
+
+// Override the standard tooltip displayed by CursorModifier
+const getTooltipLegendTemplate = (seriesInfos: SeriesInfo[], svgAnnotation: CursorTooltipSvgAnnotation) => {
+    let outputSvgString = "";
+
+    // Foreach series there will be a seriesInfo supplied by SciChart. This contains info about the series under the house
+    seriesInfos.forEach((seriesInfo, index) => {
+        const y = 20 + index * 20;
+        const textColor = seriesInfo.stroke;
+        let legendText = seriesInfo.formattedYValue;
+        if (seriesInfo.dataSeriesType === EDataSeriesType.Ohlc) {
+            const o = seriesInfo as OhlcSeriesInfo;
+            legendText = `Open=${o.formattedOpenValue} High=${o.formattedHighValue} Low=${o.formattedLowValue} Close=${o.formattedCloseValue}`;
+        }
+        outputSvgString += `<text x="500" y="${y}" font-size="13" font-family="Verdana" fill="${textColor}">
+            ${seriesInfo.seriesName}: ${legendText}
+        </text>`;
+    });
+
+    return `<svg width="100%" height="100%">
+                ${outputSvgString}
+            </svg>`;
+};

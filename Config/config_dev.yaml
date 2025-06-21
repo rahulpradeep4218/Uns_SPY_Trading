@@ -31,7 +31,7 @@ trade_parameters:
   trade_risk_ratio_threshold: 0.8
 mlflow:
   experiment_name: 'xgboost_power'
-  tracking_uri: 'http://mlflow:5001'
+  tracking_uri: 'http://localhost:5001'
   high_model_name: 'xgboost_power_high'
   low_model_name: 'xgboost_power_low'
   scaler_artifact_path: 'scalers'

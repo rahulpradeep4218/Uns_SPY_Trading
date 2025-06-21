@@ -1,5 +1,6 @@
 from pyexpat import model
 
+from sympy import im
 from torch import mode
 
 from trading_functions.training.utility import get_columns_mapping
@@ -12,7 +13,9 @@ import os
 import shutil
 import joblib
 import pandas as pd
+import numpy as np
 import yaml
+from datetime import datetime, timezone
 
 def scale_for_inference(data, config, scalers):
     scale_cfg = config['scaling']
@@ -127,5 +130,57 @@ def transform_for_inference(data, config, scalers):
     return data
 
 
+def make_random_candles(n, freq_minutes):
+    end = datetime.now(timezone.utc)
+    dates = pd.date_range(end=end, periods=n, freq=f"{freq_minutes}T")
+    price = 100 + np.cumsum(np.random.randn(n))
+    opens = price + np.random.randn(n)*0.5
+    closes = price + np.random.randn(n)*0.5
+    highs = np.maximum(opens, closes) + np.random.rand(n)*1.0
+    lows = np.minimum(opens, closes) - np.random.rand(n)*1.0
 
+    return pd.DataFrame({
+        "date": dates,
+        "open": opens,
+        "high": highs,
+        "low": lows,
+        "close": closes
+    })
+# define a fixed y‐scale:
 
+def get_config():
+    """
+    Load the configuration from the config.yaml file.
+    """
+    config_path = '../../Config/config_dev.yaml'
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file {config_path} not found.")
+    
+    with open(config_path, 'r') as file:
+        config = yaml.safe_load(file)
+    
+    return config
+
+def mlflow_aliases(config):
+    """
+    Get MLflow aliases from the config.
+    """
+    result = {}
+    mlflow_tracking = config['mlflow']['tracking_uri']
+    models = [config['mlflow']['high_model_name'], config['mlflow']['low_model_name']]
+    logger.info(f"Fetching MLflow aliases for models: {models} from tracking URI: {mlflow_tracking}")
+    if mlflow_tracking:
+        mlflow.set_tracking_uri(mlflow_tracking)
+
+    client = MlflowClient()
+    for model in models:
+        aliases = set()
+        versions = client.search_model_versions(f"name='{model}'")
+        print(f"Versions : {versions}")
+        for v in versions:
+            mv = client.get_model_version(name=model, version=v.version)
+            if mv.aliases:
+                aliases.update(mv.aliases)
+
+        result[model] = aliases
+    return result

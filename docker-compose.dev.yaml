@@ -31,6 +31,8 @@ services:
 
     networks:
       - app_network
+    ports:
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"  # Expose PostgreSQL port
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${DAGSTER_POSTGRES_DB}']
       interval: 10s
@@ -39,6 +41,28 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  init-postgresdb:
+    image: postgres:11
+    container_name: init_postgresdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "bash /init_dbs.sh"
+    volumes:
+      - ./dbscripts/init_dbs.sh:/init_dbs.sh
+      - ./dbscripts/init_sql.sql:/init_sql.sql
+
+    
   mlflow:
     build:
       context: .
@@ -64,6 +88,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      init-postgresdb:
+        condition: service_completed_successfully
 
   dagster_code:
     build:
@@ -94,6 +120,7 @@ services:
       - data_volume:${DATA_CONTAINER_PATH}  # Mount shared data volume
       - training_runs:/app/training_runs  # Mount shared training runs volume
       - dagster_local_artifacts:/app/dagster_local_artifacts  # Mount dagster local artifacts volume
+    
 
   dagster_webserver:
     build:
@@ -134,6 +161,8 @@ services:
         condition: service_healthy
       dagster_code:
         condition: service_started
+      init-postgresdb:
+        condition: service_completed_successfully
 
   dagster_daemon:
     build:
@@ -169,6 +198,8 @@ services:
         condition: service_healthy
       dagster_code:
         condition: service_started
+      init-postgresdb:
+        condition: service_completed_successfully
 
 volumes:
 
@@ -183,7 +214,7 @@ volumes:
     driver: local
     driver_opts:
       type: none
-      device: ${WORKING_DIRECTORY}/pgdata  # Your local folder for PostgreSQL data
+      device: ${WORKING_DIRECTORY}/pgdata2  # Your local folder for PostgreSQL data
       o: bind
 
   config_volume:

@@ -24,7 +24,7 @@ import { init } from "next/dist/compiled/webpack/webpack";
 const useStyles = makeStyles()((theme) => ({
     flexOuterContainer: {
         width: "100%",
-        height: "100%",
+        height: "90%",
         display: "flex",
         flexDirection: "column",
         background: appTheme.DarkIndigo,
@@ -119,7 +119,7 @@ export default function UserAnnotatedStockChart() {
                                 style={{ color: appTheme.ForegroundColor, borderColor: "#00bcd466" }}
                                 onClick={() => handleToggleButtonChanged(null, "horline")}
                             >
-                                Horizontal Lines
+                                Horiz Line
                             </ToggleButton>
                             <ToggleButton
                                 value={"marker"}
