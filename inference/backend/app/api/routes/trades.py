@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from torch import seed
 from app.db import models, schemas
 from app.api.deps import get_db
 from typing import List, Dict
@@ -9,29 +10,16 @@ from trading_functions.inference.inf_functions import (
     make_random_candles
 )
 import numpy as np
+from app.utility.seed_random_ohlc_data import seed_random_ohlc_data
 
 router = APIRouter()
 
 
 @router.get("/random_candles")
-def get_random_candles(n: int = 100, freq_minutes: int = 1):
-    """
-    Generate random candles for testing purposes.
-    
-    Parameters:
-    - n: Number of candles to generate
-    - freq_minutes: Frequency in minutes for the candles
-    
-    Returns:
-    - List of dictionaries representing the candles
-    """
-    candles_df = make_random_candles(n, freq_minutes)
+def get_random_candles():
+    message = seed_random_ohlc_data()
     return {
-        "xValues": (candles_df['date'].astype(np.int64) // 10**6).tolist(),
-        "openValues": candles_df['open'].round(2).tolist(),
-        "highValues": candles_df['high'].round(2).tolist(),
-        "lowValues": candles_df['low'].round(2).tolist(),
-        "closeValues": candles_df['close'].round(2).tolist()
+        "message": message
     }
 
 
@@ -89,3 +77,4 @@ def get_ohlc_gaps(
             for row in result
         ]
     }
+

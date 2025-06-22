@@ -1,8 +1,18 @@
+'use client';
+import dynamic from 'next/dynamic';
+import TradeSessionsTable from '@/components/TradeSessionsTable';
+
+const UserAnnotatedStockChart = dynamic(() => import('@/components/sciChart/annot-chart'), {ssr: false});
+
 export default function SimulationPage(){
     return (
-        <div>
-            <h1>Simulation Page</h1>
-            <p>This is the simulation page content.</p>
-        </div>
+        <>
+            <div style={{ height: '100vh', width: '100%' }}>   
+                <UserAnnotatedStockChart />
+            </div>
+            <div>
+                <TradeSessionsTable />
+            </div>
+        </>
     );
 }

@@ -214,7 +214,7 @@ volumes:
     driver: local
     driver_opts:
       type: none
-      device: ${WORKING_DIRECTORY}/pgdata2  # Your local folder for PostgreSQL data
+      device: ${WORKING_DIRECTORY}/pgdata  # Your local folder for PostgreSQL data
       o: bind
 
   config_volume:

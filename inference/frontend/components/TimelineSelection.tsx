@@ -6,8 +6,9 @@ import { Bar, getElementAtEvent } from 'react-chartjs-2';
 import { useEffect, useState, useRef } from 'react';
 import { bottomNavigationActionClasses } from '@mui/material';
 import { color } from 'chart.js/helpers';
+import zoomPlugin from 'chartjs-plugin-zoom';
 
-Chart.register(LinearScale, TimeScale, CategoryScale, BarElement, Tooltip, Legend, annotationPlugin);
+Chart.register(LinearScale, TimeScale, CategoryScale, BarElement, Tooltip, Legend, annotationPlugin, zoomPlugin);
 
 interface Gap {
     gap_start: string | null;
@@ -116,11 +117,12 @@ export default function TimelineSelection({
             {
                 label: "Available Data",
                 data: [[fullStart, fullEnd]],
-                backgroundColor: 'rgba(67, 148, 242, 0.7)',  // Vibrant blue (data available)
+                backgroundColor: 'rgba(28, 121, 228, 0.7)',  // Vibrant blue (data available)
                 borderColor: 'rgba(67, 148, 242, 1)',
                 borderWidth: 1,
                 barPercentage: 1.0,
                 categoryPercentage: 1.0,
+                z: 10
             },
         ],
     };
@@ -135,7 +137,7 @@ export default function TimelineSelection({
             xMax: startTime,
             yMin: -0.5,
             yMax: 0.5,
-            z: 10,
+            z: 40,
             borderColor: '#4394F2',
             borderWidth: 5,
             label: {
@@ -156,7 +158,7 @@ export default function TimelineSelection({
             xMax: endTime,
             yMin: -0.5,
             yMax: 0.5,
-            z: 10,
+            z: 40,
             borderColor: '#E64A19',
             borderWidth: 5,
             label: {
@@ -172,7 +174,7 @@ export default function TimelineSelection({
     dataRange.gaps.forEach((gap: Gap, i: number) => {
         const xMin = gap.gap_start !== null ? new Date(gap.gap_start).getTime() : fullStart;
         const xMax = gap.gap_end !== null ? new Date(gap.gap_end).getTime() : fullEnd;
-
+        console.log(`Gap ${i}:`, xMin, xMax);
         let labelText = "Gap";
         if (gap.gap_start === null) labelText = "No data before";
         else if (gap.gap_end === null) labelText = "No data after";
@@ -183,7 +185,8 @@ export default function TimelineSelection({
             xMax,
             yMin: -0.5,
             yMax: 0.5,
-            backgroundColor: 'rgba(245, 245, 245, 0.9)',  // Grayish-white
+            z: 15,
+            backgroundColor: 'rgba(168, 14, 14, 0.9)',  // Grayish-white
             borderColor: 'rgba(220, 220, 220, 1)',       // Light gray border
             borderWidth: 1,
             label: {
@@ -201,6 +204,7 @@ export default function TimelineSelection({
             xMax: cursorPosition,
             yMin: -0.5,
             yMax: 0.5,
+            z: 50,
             borderColor: 'rgba(0, 0, 0, 0.8)',
             borderWidth: 2,
             label: {
@@ -267,6 +271,31 @@ export default function TimelineSelection({
                 display: false,
             },
             annotation: { annotations },
+            zoom: {
+                pan: {
+                    enabled: true,
+                    mode: 'x',
+                },
+                zoom: {
+                    wheel: {
+                        enabled: true,
+                    },
+                    pinch: {
+                        enabled: true,
+                    },
+                    drag: {
+                        enabled: true,
+                        modifierKey: 'ctrl',
+                    },
+                    mode: 'x',
+                },
+                limits: {
+                    x: {
+                        min: fullStart,
+                        max: fullEnd,
+                    },
+                }
+            },
             /*
             tooltip: {
                 callbacks: {

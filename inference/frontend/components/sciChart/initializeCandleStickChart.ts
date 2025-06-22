@@ -64,30 +64,25 @@ const deleteOnClick = (args: AnnotationClickEventArgs) => {
 
 registerFunction(EBaseType.OptionFunction, "deleteOnClick", deleteOnClick);
 
+function optimalDataPointWidth(xVal: number[]){
+    const xMin = xVal[0]
+    const xMax = xVal[xVal.length - 1];
+    const totalTimeRange = xMax - xMin;
+    console.log("Total time range:", totalTimeRange);
+    const expectedCandleCount = totalTimeRange / (60 * 250); // Assuming 1 minute candles
+    console.log("Expected candle count:", expectedCandleCount);
+    const returnVal = Math.min(0.8, Math.max(0.000000000000001, 0.8 / expectedCandleCount)); 
+    console.log("Calculated dataPointWidth:", returnVal);
+    return returnVal;
+}
 export const initializeCandleStickChart = async (divElementId: string | HTMLDivElement) => {
     const { sciChartSurface, wasmContext } = await SciChartSurface.create(divElementId, {
         theme: appTheme.SciChartJsTheme
     });
 
-    const xAxis = new CategoryAxis(wasmContext, {
-        // autoRange.never as we're setting visibleRange explicitly below. If you dont do this, leave this flag default
-        autoRange: EAutoRange.Never,
-        labelProvider: new SmartDateLabelProvider(),
-    });
-    sciChartSurface.xAxes.add(xAxis);
-
-    // Create a NumericAxis on the YAxis with 2 Decimal Places
-    sciChartSurface.yAxes.add(
-        new NumericAxis(wasmContext, {
-            growBy: new NumberRange(0.1, 0.1),
-            labelFormat: ENumericFormat.Decimal,
-            labelPrecision: 2,
-            labelPrefix: "$",
-            autoRange: EAutoRange.Always,
-        })
-    );
+    
     const inf_url = process.env.NEXT_PUBLIC_INF_URL;
-    const res = await fetch(`${inf_url}/api/trades/random_candles`)
+    const res = await fetch(`${inf_url}/api/price_data/SPY`)
     const ohlcData = await res.json();
 
     // const day = 24 * 60 * 60;
@@ -109,18 +104,34 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
     //     closeValues,
     //     dataSeriesName: "BTC/USDT",
     // });
+    const xValues = ohlcData.map((item: any) => {
+        const ts = new Date(item.time).getTime()/1000; 
+        if (isNaN(ts)) {
+            console.error("Invalid timestamp in OHLC data:", item.time);
+        }
+        return ts;
+    });
+    const openValues = ohlcData.map((item: any) => item.open);
+    const highValues = ohlcData.map((item: any) => item.high);
+    const lowValues = ohlcData.map((item: any) => item.low);
+    const closeValues = ohlcData.map((item: any) => item.close);
+    console.log("xValues preview:", xValues.slice(0, 5).map(ts => new Date(ts * 1000).toISOString()));
     const candleDataSeries = new OhlcDataSeries(wasmContext, {
-        xValues: ohlcData.xValues,
-        openValues: ohlcData.openValues,
-        highValues: ohlcData.highValues,
-        lowValues: ohlcData.lowValues,
-        closeValues: ohlcData.closeValues,
+        xValues: xValues,
+        openValues: openValues,
+        highValues: highValues,
+        lowValues: lowValues,
+        closeValues: closeValues,
         dataSeriesName: "Rahul Random Candles",
     });
-
+            
     const candlestickSeries = new FastCandlestickRenderableSeries(wasmContext, {
         id: "Candles",
         dataSeries: candleDataSeries,
+        //dataPointWidth: 0.005, // width of the candle
+        
+        dataPointWidth: optimalDataPointWidth(xValues), // width of the candle
+        
         stroke: appTheme.ForegroundColor, // used by cursorModifier below
         strokeThickness: 1,
         brushUp: appTheme.VividGreen + "77",
@@ -152,6 +163,24 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         })
     );
 
+    const cursorModifier = new CursorModifier({
+        crosshairStroke: appTheme.MutedOrange,
+        axisLabelFill: appTheme.VividOrange,
+        tooltipLegendTemplate: getTooltipLegendTemplate,
+        showAxisLabels: true,
+        xAxisLabelFormatter: (dateValue: number) => {
+            return new Date(dateValue).toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            });
+        }
+    });
+
+
     // Optional: Add some interactivity modifiers
     sciChartSurface.chartModifiers.add(
         new ZoomExtentsModifier(),
@@ -160,16 +189,38 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         new CreateTradeMarkerModifier({ id: "marker" }),
         new CreateLineAnnotationModifier({ id: "line" }),
         new CreateHorizontalLineModifier({ id: "horline" }),
-        new CursorModifier({
-            crosshairStroke: appTheme.MutedOrange,
-            axisLabelFill: appTheme.VividOrange,
-            tooltipLegendTemplate: getTooltipLegendTemplate,
-        }),
+        cursorModifier,
     );
     sciChartSurface.chartModifiers.getById("marker").isEnabled = false;
     sciChartSurface.chartModifiers.getById("line").isEnabled = false;
     sciChartSurface.chartModifiers.getById("horline").isEnabled = false;
+    const xAxis = new DateTimeNumericAxis(wasmContext, {
+        // autoRange.never as we're setting visibleRange explicitly below. If you dont do this, leave this flag default
+        autoRange: EAutoRange.Never,
+        labelFormat: ENumericFormat.Date_HHMMSS,
+        drawMajorGridLines: false,
+        drawMinorGridLines: false,
+        majorDelta: 1,
+        minorDelta: 0.2,
+        growBy: new NumberRange(0.05, 0.05),
+        labelProvider: new SmartDateLabelProvider({
+            labelFormat: ENumericFormat.Date_HHMM,
+            cursorLabelFormat: ENumericFormat.Date_DDMMHHMM,
+        }),
+        cursorLabelFormat: ENumericFormat.Date_HHMM,
+    });
+    sciChartSurface.xAxes.add(xAxis);
 
+    // Create a NumericAxis on the YAxis with 2 Decimal Places
+    sciChartSurface.yAxes.add(
+        new NumericAxis(wasmContext, {
+            growBy: new NumberRange(0.1, 0.1),
+            labelFormat: ENumericFormat.Decimal,
+            labelPrecision: 2,
+            labelPrefix: "$",
+            autoRange: EAutoRange.Always,
+        })
+    );
     const helpAnnotation = new NativeTextAnnotation({
         x1: 20,
         y1: 20,
@@ -223,7 +274,9 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
     const resetChart = () => {
         sciChartSurface.annotations.clear(true);
         // Zoom to the latest 100 candles
-        xAxis.visibleRange = new NumberRange(ohlcData.xValues.length - 100, ohlcData.xValues.length - 1);
+        const startIdx = Math.max(0, xValues.length - 100);
+        const total = xValues.length;
+        xAxis.visibleRange = new NumberRange(xValues[startIdx], xValues[total - 1]);
     };
 
     resetChart();
