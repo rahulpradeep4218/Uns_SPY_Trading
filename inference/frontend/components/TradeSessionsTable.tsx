@@ -7,7 +7,7 @@ import { Delete, Edit } from '@mui/icons-material';
 import axios from 'axios';
 import { usePageContext } from '@/context/PageContext';
 import { format } from 'path';
-import { last, set } from 'lodash';
+import { last, set, update } from 'lodash';
 import { time } from 'console';
 
 import { renderTradeMarkers } from '@/components/sciChart/renderTradeMarkers';
@@ -282,6 +282,21 @@ export default function TradeSessionsTable() {
             }}
             >
                 Create New 
+            </Button>
+            <Button
+            variant="contained"
+            sx={{mb: 2, ml: 2}}
+            onClick={async () => {
+                if (!selected_session) {
+                    alert("Please select a session to clear trades.");
+                    return;
+                }
+                const deleteResponse = await axios.get(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/remove_all_trades/${selected_session}`);
+                console.log("Delete response:", deleteResponse.data);
+                updateCurrentSessionData(selected_session);
+            }}
+            >
+                Clear All Trades 
             </Button>
 
             <DataGrid

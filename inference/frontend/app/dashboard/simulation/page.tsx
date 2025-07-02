@@ -18,9 +18,6 @@ export default function SimulationPage(){
                 <UserAnnotatedStockChart />
             </div>
             <div>
-                <TradeSignalControls />
-            </div>
-            <div>
                 <TradeStatsDashboard />
             </div>
             <div style={{ height: '100vh', width: '100%', marginTop: '20px' }}>

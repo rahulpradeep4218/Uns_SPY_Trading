@@ -37,6 +37,8 @@ def serialize_candle(candle):
         'volume': candle.volume,
     }
 
+
+
 @router.get("/get_session/{session_id}")
 async def get_session(session_id: int, db: Session = Depends(get_db)):
 
@@ -50,11 +52,7 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
             PriceData.time >= session.trade_start
         ).all()
     all_candles_count = len(candles_query)
-    all_trades, trade_stats = get_trade_and_trade_stats(
-        db,
-        session_id,
-        all_candles_count
-    )
+
     last_trade_signal_row = db.query(TradeRecord).filter(
         TradeRecord.session_id == session_id,
     ).order_by(TradeRecord.trade_time.desc()).first()
@@ -62,6 +60,24 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
         last_trade_signal_time = last_trade_signal_row.trade_time
     else:
         last_trade_signal_time = None
+    progress = 0.0
+    if last_trade_signal_time:    
+        candles_till_now = db.query(PriceData).filter(
+            PriceData.symbol == session.symbol,
+            PriceData.time <= last_trade_signal_time
+        ).all()
+        candle_till_now_count = len(candles_till_now)
+        if all_candles_count > 0:
+            progress = candle_till_now_count / all_candles_count * 100
+        else:
+            progress = 0.0
+
+
+    all_trades, trade_stats = get_trade_and_trade_stats(
+        db,
+        session_id,
+        progress
+    )
 
     response = {
         "session": jsonable_encoder(session),
@@ -70,6 +86,12 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
         "last_trade_signal_time": last_trade_signal_time,
     }
     return response
+
+@router.get("/remove_all_trades/{session_id}")
+async def remove_all_trades(session_id: int, db: Session = Depends(get_db)):
+    db.query(TradeRecord).filter(TradeRecord.session_id == session_id).delete()
+    db.commit()
+    return {"message": "All trades removed successfully."}
 
 
 @router.websocket("/ws/simulation/{session_id}")
@@ -153,11 +175,14 @@ async def websocket_simulation(
                 model_low, 
                 scalers
             )
+
             candles_till_now = db.query(PriceData).filter(
                 PriceData.symbol == session_record.symbol,
                 PriceData.time <= current_candle.time,
                 PriceData.time >= session_record.trade_start
             ).all()
+            candle_till_now_count = len(candles_till_now)
+            progress = candle_till_now_count / len(all_candles) * 100 if all_candles else 0
             candles_list = [can for can in candles_till_now]
             candle_table = jsonable_encoder(candles_list)
             await websocket.send_json({
@@ -168,7 +193,7 @@ async def websocket_simulation(
             all_trades, trade_stats = get_trade_and_trade_stats(
                 db,
                 session_id,
-                len(all_candles)
+                progress
             )
 
             await websocket.send_json({
@@ -187,7 +212,7 @@ async def websocket_simulation(
         print(f"Client disconnected from session {session_id}")
 
 
-def get_trade_and_trade_stats(db: Session, session_id: int, total_session_candles: int):
+def get_trade_and_trade_stats(db: Session, session_id: int, progress: float):
     trades_closed = db.query(TradeRecord).filter(
         TradeRecord.session_id == session_id,
         TradeRecord.status == "CLOSED",
@@ -235,7 +260,7 @@ def get_trade_and_trade_stats(db: Session, session_id: int, total_session_candle
         average_profit=average_profit,
         unrealized_profit=unrealized_profit,
         total_profit=total_profit,
-        percent_complete= all_trade_signals / total_session_candles * 100 if total_session_candles > 0 else 0
+        percent_complete= progress
     )
 
     return all_trades, trade_stats
