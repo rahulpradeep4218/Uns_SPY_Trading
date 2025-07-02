@@ -3,22 +3,33 @@ import { Chart, LinearScale, TimeScale, BarElement, Tooltip, Legend, scales, Cha
 import annotationPlugin from 'chartjs-plugin-annotation';
 import 'chartjs-adapter-date-fns';
 import { Bar, getElementAtEvent } from 'react-chartjs-2';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback, use } from 'react';
 import { bottomNavigationActionClasses } from '@mui/material';
 import { color } from 'chart.js/helpers';
-import zoomPlugin from 'chartjs-plugin-zoom';
+import zoomPlugin, { zoom } from 'chartjs-plugin-zoom';
+import { set, throttle } from 'lodash';
+import Slider from '@mui/material/Slider';
+import { styled } from '@mui/material/styles';
+
+
+const RangeSliderContainer = styled('div')({
+  padding: '20px 40px',
+  marginTop: '-20px', // Pull it up closer to the chart
+});
+
+
 
 Chart.register(LinearScale, TimeScale, CategoryScale, BarElement, Tooltip, Legend, annotationPlugin, zoomPlugin);
 
-interface Gap {
-    gap_start: string | null;
-    gap_end: string | null;
+interface Coverage {
+    start: string | null;
+    end: string | null;
 }
 
 interface DataRange {
     start: string;
     end: string;
-    gaps: Gap[];
+    coverage: Coverage[];
 }
 
 interface TimelineSelectionProps {
@@ -28,6 +39,13 @@ interface TimelineSelectionProps {
     selectedStart?: string | null;
     selectedEnd?: string | null;
 }
+
+interface ZoomRange {
+  min: number;
+  max: number;
+}
+
+
 
 
 export default function TimelineSelection({ 
@@ -41,42 +59,70 @@ export default function TimelineSelection({
     const [dataRange, setDataRange] = useState<DataRange | null>(null);
     const [cursorPosition, setCursorPosition] = useState<number | null>(null);
     const [cursorTime, setCursorTime] = useState<string>('');
-    
+    const [zoomRange, setZoomRange] = useState<ZoomRange>({
+    min: 0,
+    max: 0
+    });
+    const [fullRange, setFullRange] = useState<{ start: number; end: number }>({
+        start: 0,
+        end: 0
+    });
     
     useEffect(() => {
-        const fetchGaps = async () => {
+        const fetchCoverage = async () => {
             try {
                 const inf_url = process.env.NEXT_PUBLIC_INF_URL;
-                const response = await fetch(`${inf_url}/api/trades/ohlc/gaps?symbol=${symbol}`);
+                const response = await fetch(`${inf_url}/api/trades/ohlc/coverage?symbol=${symbol}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
                 setDataRange(data);
+
+                //Calculate extended range
+                const extendedStart = new Date(data.start);
+                extendedStart.setDate(extendedStart.getDate() - 5); // Extend start by five days
+                const extendedEnd = new Date(data.end);
+                extendedEnd.setDate(extendedEnd.getDate() + 5); // Extend end by
+
+                const fullStart = extendedStart.getTime();
+                const fullEnd = extendedEnd.getTime();
+                setFullRange({
+                    start: fullStart,
+                    end: fullEnd
+                });
+                setZoomRange({
+                    min: fullStart,
+                    max: fullEnd
+                });
+
             } catch (error) {
-                console.error("Error fetching gaps:", error);
+                console.error("Error fetching coverage:", error);
             }
         };
-        fetchGaps();
+        fetchCoverage();
 
     }, [symbol]);
 
-    const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-        if(!chartRef.current) return;
+    const handleMouseMove = useMemo(() => {
+        return throttle((event: React.MouseEvent<HTMLCanvasElement>) => {
+            if(!chartRef.current) return;
 
-        const chart = chartRef.current;
-        const canvas = chart.canvas;
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left; // Get mouse x position relative to canvas
-        const xScale = chart.scales.x;
-        const value = xScale.getValueForPixel(x);
+            const chart = chartRef.current;
+            const canvas = chart.canvas;
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left; // Get mouse x position relative to canvas
+            const xScale = chart.scales.x;
+            const value     = xScale.getValueForPixel(x);
 
-        setCursorPosition(value);
+            setCursorPosition(value);
 
-        const date = new Date(value);
-        const formattedTime = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
-        setCursorTime(formattedTime);
-    };
+            const date = new Date(value);
+            const formattedTime = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+            setCursorTime(formattedTime);
+        }, 100);
+    }, []);
+
 
     const handleMouseLeave = () => {
         setCursorPosition(null);
@@ -100,25 +146,64 @@ export default function TimelineSelection({
         const value = xScale.getValueForPixel(x);
         console.log(`Clicked at:` , new Date(value));
         const date = new Date(value);
-        onChange(date.toISOString());
+        onChange(date.toLocaleString('sv-SE').replace(' ', 'T')); // Convert to ISO format
         onClose();
+    };
+
+
+    const handleZoomRangeChange = useCallback((event: Event, newValue: number | number[], activeThumb: number) => {
+        if (!Array.isArray(newValue)) return;
+        
+        if (newValue[0] >= newValue[1]) return;
+        
+        setZoomRange({
+            min: newValue[0],
+            max: newValue[1]
+        });
+
+        if (chartRef.current) {
+            const chart = chartRef.current;
+            chart.options.scales.x.min = newValue[0];
+            chart.options.scales.x.max = newValue[1];
+            chart.update();
+        }
+
+    }, [chartRef, fullRange.start, fullRange.end]);
+
+    const getSliderMarks = () => {
+        if (!dataRange) return [];
+
+        const marks = [];
+        const start = new Date(fullRange.start);
+        const end = new Date(fullRange.end);
+
+        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+        const step = Math.max(1, Math.floor(totalDays / 5)); // Adjust step to ensure marks are not too dense
+
+        for (let i = 0; i <= totalDays; i += step) {
+            const markDate = new Date(start);
+            markDate.setDate(start.getDate() + i);
+            marks.push({
+                value: markDate.getTime(),
+                label: markDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            });
+        }
+
+        return marks;
     };
 
     if (!dataRange) {
         return <div>Loading TimelineSelection...</div>;
     }
-
-    const fullStart = new Date(dataRange.start).getTime();
-    const fullEnd = new Date(dataRange.end).getTime();
-
     const data = {
-        labels: ["Data availability"],
+        labels: ["Full Range"],
         datasets: [
             {
-                label: "Available Data",
-                data: [[fullStart, fullEnd]],
-                backgroundColor: 'rgba(28, 121, 228, 0.7)',  // Vibrant blue (data available)
-                borderColor: 'rgba(67, 148, 242, 1)',
+                label: "Full Range",
+                data: [[fullRange.start, fullRange.end]],
+                backgroundColor: 'rgba(234, 242, 250, 0.7)',  // Vibrant blue (data available)
+                borderColor: 'rgb(194, 219, 248)',
                 borderWidth: 1,
                 barPercentage: 1.0,
                 categoryPercentage: 1.0,
@@ -171,15 +256,15 @@ export default function TimelineSelection({
         };
     }
     //Gaps
-    dataRange.gaps.forEach((gap: Gap, i: number) => {
-        const xMin = gap.gap_start !== null ? new Date(gap.gap_start).getTime() : fullStart;
-        const xMax = gap.gap_end !== null ? new Date(gap.gap_end).getTime() : fullEnd;
-        console.log(`Gap ${i}:`, xMin, xMax);
-        let labelText = "Gap";
-        if (gap.gap_start === null) labelText = "No data before";
-        else if (gap.gap_end === null) labelText = "No data after";
+    dataRange.coverage.forEach((cov: Coverage, i: number) => {
+        const xMin = new Date(cov.start).getTime();
+        const xMax = new Date(cov.end).getTime();
+        console.log(`Coverage ${i}:`, xMin, xMax);
+        let labelText = "Coverage";
+        if (cov.start === null) labelText = "No data before";
+        else if (cov.end === null) labelText = "No data after";
         
-        annotations[`gap-${i}`] = {
+        annotations[`coverage-${i}`] = {
             type: 'box',
             xMin,
             xMax,
@@ -187,7 +272,7 @@ export default function TimelineSelection({
             yMax: 0.5,
             z: 15,
             backgroundColor: 'rgba(168, 14, 14, 0.9)',  // Grayish-white
-            borderColor: 'rgba(220, 220, 220, 1)',       // Light gray border
+            borderColor: 'rgb(223, 56, 56)',       // Light gray border
             borderWidth: 1,
             label: {
                 content: labelText,
@@ -222,20 +307,26 @@ export default function TimelineSelection({
     const options: ChartOptions<"bar"> = {
         responsive: true,
         indexAxis: 'y',
+        animation: false,
         scales: {
             x: {
                 type: 'time',
                 time: {
-                    unit: 'hour',
+                    unit: 'day',
                     displayFormats: {
-                        hour: 'HH:mm',
+                        minute: 'HH:mm',
+                        hour: "HH:mm",
                         day: 'MMM dd',
                     },
                     parser: (label) => new Date(label),
                     tooltipFormat: 'MMM dd HH:mm',
                 },
-                min: fullStart,
-                max: fullEnd,
+                min: zoomRange.min,
+                max: zoomRange.max,
+                afterFit: (scale) => {
+                    scale.min = zoomRange.min;
+                    scale.max = zoomRange.max;
+                },
                 ticks: {
                     //callback to format ticks
                     callback: function(value, index, values){
@@ -270,32 +361,11 @@ export default function TimelineSelection({
             legend: {
                 display: false,
             },
-            annotation: { annotations },
-            zoom: {
-                pan: {
-                    enabled: true,
-                    mode: 'x',
-                },
-                zoom: {
-                    wheel: {
-                        enabled: true,
-                    },
-                    pinch: {
-                        enabled: true,
-                    },
-                    drag: {
-                        enabled: true,
-                        modifierKey: 'ctrl',
-                    },
-                    mode: 'x',
-                },
-                limits: {
-                    x: {
-                        min: fullStart,
-                        max: fullEnd,
-                    },
-                }
+            annotation: { 
+                annotations: annotations,
+                clip: false, // Ensure annotations are not clipped 
             },
+            
             /*
             tooltip: {
                 callbacks: {
@@ -320,6 +390,32 @@ export default function TimelineSelection({
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
         />
+        <RangeSliderContainer>
+            <Slider
+                value={[zoomRange.min, zoomRange.max]}
+                onChange={handleZoomRangeChange}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => new Date(value).toLocaleDateString()}
+                min={fullRange.start}
+                max={fullRange.end}
+                step={60 * 60 * 1000} // Step by one day
+                marks={getSliderMarks()}
+                sx={{
+                    '& .MuiSlider-thumb': {
+                        height: 20,
+                        width: 10,
+                        borderRadius: '4px',
+                    },
+                    '& .MuiSlider-track': {
+                        height: 8,
+                    },
+                    '& .MuiSlider-rail': {
+                        height: 8,
+                        opacity: 0.5,
+                    },
+                }}
+            />
+        </RangeSliderContainer>
         {cursorTime && (
             <div 
                 style={{

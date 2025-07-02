@@ -20,10 +20,17 @@ CREATE TABLE IF NOT EXISTS trade_records(
     high_val NUMERIC(12, 4),
     low_val NUMERIC(12, 4),
     signal INTEGER,
-    realized BOOLEAN,
+    status VARCHAR(20),
     entry_price NUMERIC(12, 4),
     exit_price NUMERIC(12, 4),
-    profit NUMERIC(12, 2)
+    buy_stop_loss NUMERIC(12, 4),
+    buy_take_profit NUMERIC(12, 4),
+    sell_take_profit NUMERIC(12, 4),
+    sell_stop_loss NUMERIC(12, 4),
+    calc_stop_loss NUMERIC(12, 4),
+    calc_take_profit NUMERIC(12, 4),
+    profit NUMERIC(12, 2),
+    exit_reason VARCHAR(20)
 );
 
 CREATE TABLE IF NOT EXISTS price_data(

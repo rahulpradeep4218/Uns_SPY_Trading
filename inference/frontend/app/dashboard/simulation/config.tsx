@@ -3,19 +3,27 @@
 import { usePageContext } from "@/context/PageContext";
 import { useState, useEffect, useRef } from "react";
 import TimelineSelection from "@/components/TimelineSelection";
+import { SimulationOptionsForm, defaultSimulationOptions } from "@/components/SimulationOptions";
+import { SimulationOptions } from "@/app/types";
 
 export default function SimulationConfig() {
     const { 
         setSidebarFields, 
-        model, 
-        setModel, 
-        model_alias, 
-        setModelAlias, 
+        model_high_alias, 
+        setModelHighAlias, 
+        model_low_alias, 
+        setModelLowAlias, 
+        setModelHighVersion,
+        setModelLowVersion,
         timeRange,
         setTimeRange,
         showTimePickerFor,
-        setShowTimePickerFor
+        setShowTimePickerFor,
+        simulationOptions,
+        setSimulationOptions
     } = usePageContext();
+    const low_model_name = process.env.NEXT_PUBLIC_LOW_MODEL_NAME || 'low_model';
+    const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
     /*
     useEffect(() => {
         console.log("Current picker state : ", showTimePickerFor);
@@ -53,13 +61,25 @@ export default function SimulationConfig() {
     const formatTime = (time: string | null) => {
         if (!time) return 'Not selected';
         const date = new Date(time);
-        return date.toLocaleString();
+        return date.toLocaleString(undefined,{
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }
+
+        );
     };
 
     const buttonRefs = {
         start: useRef<HTMLButtonElement>(null),
         end: useRef<HTMLButtonElement>(null)
     }
+    const handleOptionsSubmit = (options: SimulationOptions) => {
+        setSimulationOptions(options);
+    };
     useEffect(() => {
 
         const fetchModelAliases = async ()=> {
@@ -75,44 +95,52 @@ export default function SimulationConfig() {
         };
         const update_config = async () => {
             const modelAliases_mlflow = await fetchModelAliases();
+
             
             setSidebarFields(
                 <>
                 <div className="space-y-4 p-2">
                     <div>
-                        <label className="text-sm text-gray-50">Model</label>
-                        <select 
-                            className="w-full p-1 mt-1 rounded bg-gray-700 text-white"
-                            value={model || ''}
+                        <label className="text-xs text-gray-50 mt-2">High Model Alias / Version</label>
+                        <select
+                            className="w-full p-1 mt-1 rounded bg-gray-700 text-white text-xs"
+                            value={model_high_alias || ''}
                             onChange={(e) => {
-                                setModel(e.target.value);
-                                setModelAlias(''); // Reset alias when model changes
+                                setModelHighAlias(e.target.value);
+                                setModelHighVersion(modelAliases_mlflow[high_model_name][e.target.value] || '');
                             }}
                         >
-                            <option value="">Select Model</option>
-                            {Object.keys(modelAliases_mlflow).map((m) => (
-                                <option key={m}>{m}</option>
+                            <option value="">Select High Model Alias</option>
+                            {Object.keys(modelAliases_mlflow[high_model_name] || {}).map((al) => (
+                                <option key={al} value={al}>
+                                    {al} (v{modelAliases_mlflow[high_model_name][al]})
+                                </option>
                             ))}
                         </select>
                     </div>
 
                     <div>
-                        <label className="text-sm text-gray-50 mt-2">Alias</label>
+                        <label className="text-xs text-gray-50 mt-2">Low Model Alias / Version</label>
                         <select
-                            className="w-full p-1 mt-1 rounded bg-gray-700 text-white"
-                            value={model_alias || ''}
-                            onChange={(e) => setModelAlias(e.target.value)}
+                            className="w-full p-1 mt-1 rounded bg-gray-700 text-white text-xs"
+                            value={model_low_alias || ''}
+                            onChange={(e) => {
+                                setModelLowAlias(e.target.value);
+                                setModelLowVersion(modelAliases_mlflow[low_model_name][e.target.value] || '');
+                            }}
                         >
-                            <option value="">Select Alias</option>
-                            {( modelAliases_mlflow[model] || []).map((al) => (
-                                <option key={al}>{al}</option>
+                            <option value="">Select Low Model Alias</option>
+                            {Object.keys(modelAliases_mlflow[low_model_name] || {}).map((al) => (
+                                <option key={al} value={al}>
+                                    {al} (v{modelAliases_mlflow[low_model_name][al]})
+                                </option>
                             ))}
                         </select>
                     </div>
 
                     {['start', 'end'].map((timeType) => (
                         <div key={timeType} className="w-full">
-                            <label className="block text-sm text-gray-50 mb-1">
+                            <label className="block text-xs text-gray-50 mb-1">
                                 {timeType === 'start' ? 'Start Time' : 'End Time'}
                             </label>
                             <div className="flex w-full">
@@ -136,8 +164,10 @@ export default function SimulationConfig() {
 
                             </div>
                         </div>
-                    ))},
+                    ))}
                 </div>
+
+                
 
                 {showTimePickerFor && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -162,11 +192,12 @@ export default function SimulationConfig() {
                         </div>
                     </div>
                 )}
+                <SimulationOptionsForm onSubmit={handleOptionsSubmit} initialValues={defaultSimulationOptions}/>
                 </>
             );
         }
         update_config();
-    }, [model, model_alias, timeRange, showTimePickerFor]);
+    }, [model_high_alias, model_low_alias, timeRange, showTimePickerFor]);
         
     return null; // This component does not render anything directly
     

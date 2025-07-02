@@ -36,12 +36,15 @@ def delete_trade_session(db: Session, session_id: int)-> bool:
 
 
 # PRICE DATA
-def get_price_data_by_symbol(db: Session, symbol: str, start_time: Optional[datetime], end_time: Optional[datetime]) -> list[schemas.PriceDataResponse]:
+def get_price_data_by_symbol(db: Session, symbol: str, start_time: Optional[datetime], end_time: Optional[datetime], limit: Optional[int]) -> list[schemas.PriceDataResponse]:
     query = db.query(models.PriceData).filter(models.PriceData.symbol == symbol)
 
     if start_time:
         query = query.filter(models.PriceData.time >= start_time)
     if end_time:
         query = query.filter(models.PriceData.time <= end_time)
-    return query.order_by(models.PriceData.time).all()
+    query = query.order_by(models.PriceData.time)
+    if limit:
+        query = query.limit(limit)
+    return query.all()
 

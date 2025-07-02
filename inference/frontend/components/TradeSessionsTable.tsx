@@ -1,50 +1,192 @@
 'use client'
-
+import { DateTime } from "luxon";
 import React, { useState, useEffect } from 'react';
-import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridActionsCellItem, GridRowSelectionModel } from '@mui/x-data-grid';
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
 import { Delete, Edit } from '@mui/icons-material';
 import axios from 'axios';
+import { usePageContext } from '@/context/PageContext';
+import { format } from 'path';
+import { last, set } from 'lodash';
+import { time } from 'console';
+
+import { renderTradeMarkers } from '@/components/sciChart/renderTradeMarkers';
 
 
-interface TradeSession {
-    id: number;
+interface TradeSession {    
+    id?: number,
     type: string,
     symbol: string,
-    trade_start: string,
-    trade_end: string,
+    trade_start: string | Date,
+    trade_end: string | Date,
     model_high_version: number,
     model_high_alias: string,
     model_low_version: number,
     model_low_alias: string,
 }
 
+
+
 export default function TradeSessionsTable() {
     const [sessions, setSessions] = useState<TradeSession[]>([]);
+    const [loading, setLoading] = useState(true);
     const [open, setOpen] = useState(false);
     const [currentSession, setCurrentSession] = useState<TradeSession | null>(null);
-
+    const { 
+        timeRange, setTimeRange, 
+        model_high_alias, setModelHighAlias, 
+        model_high_version, setModelHighVersion, 
+        model_low_alias, setModelLowAlias, 
+        model_low_version, setModelLowVersion, 
+        selected_session, setSelectedSession,
+        tradeStats, setTradeStats,
+        tradeRecords, setTradeRecords,
+        sciChartSurfaceRef,
+        tradeMarkerMapRef,
+        candleDataSeriesRef
+     } = usePageContext();
     // Fetch data from API
+
+    const handleRowSelection = (model: {
+        type: 'include' | 'exclude';
+        ids: Set<number>;
+    }) => {
+        const { ids } = model;
+        if (ids.size === 0) {
+            setSelectedSession(null);
+            return;
+        }
+        const idsArray = Array.from(ids);
+        const lastSelectedId = idsArray[idsArray.length - 1];
+        //console.log("Last selected id :", lastSelectedId);
+        setSelectedSession(lastSelectedId);
+        updateCurrentSessionData(lastSelectedId);
+    };
+
+
+    const updateCurrentSessionData = (sess_id: number) => {
+        const fetchSessionDetails = async () => {
+            try{
+                console.log("Fetching session details for ID:", sess_id);
+                const response = await axios.get(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/get_session/${sess_id}/`);
+                console.log("Session details response:", response.data);
+                const session_record = response.data.session
+                const trade_stats = response.data.trade_stats;
+                const trade_records = response.data.trades;
+                const last_trade_signal_time = response.data.last_trade_signal_time;
+                console.log("Fetched session details:", session_record);
+                setModelHighAlias(session_record.model_high_alias);
+                console.log("Setting model_high_alias to:", session_record.model_high_alias);
+                setModelHighVersion(session_record.model_high_version);
+                setModelLowAlias(session_record.model_low_alias);
+                setModelLowVersion(session_record.model_low_version);
+                setTimeRange({
+                    start: session_record.trade_start,
+                    end: session_record.trade_end
+                });
+                setTradeStats(trade_stats);
+                setTradeRecords(trade_records);
+
+                const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+                let ohlcDataUrl = `${inf_url}/api/price_data/${session_record.symbol}`;
+                if (last_trade_signal_time) {
+                    ohlcDataUrl += `?end_time=${last_trade_signal_time}`;
+                }
+                    
+                const res = await fetch(ohlcDataUrl)
+                const ohlcData = await res.json();
+                const xValues = ohlcData.map((item: any) => {
+                    const dt = DateTime.fromISO(item.time, "yyyy-MM-dd HH:mm:ss", { zone: "America/New_York" });
+                    if (!dt.isValid) {
+                        console.error("Invalid date in OHLC data:", item.time);
+                        return null; // or handle the error as needed
+                    }
+                    return dt.toMillis();
+                });
+                const openValues = ohlcData.map((item: any) => item.open);
+                const highValues = ohlcData.map((item: any) => item.high);
+                const lowValues = ohlcData.map((item: any) => item.low);
+                const closeValues = ohlcData.map((item: any) => item.close);
+                
+                await candleDataSeriesRef.current?.clear();
+                await candleDataSeriesRef.current?.appendRange(
+                    xValues,
+                    openValues,
+                    highValues,
+                    lowValues,
+                    closeValues
+                );
+
+                //sciChartSurfaceRef.current?.zoomExtents();
+                renderTradeMarkers(
+                        sciChartSurfaceRef.current,
+                        tradeRecords,
+                        tradeMarkerMapRef
+                    );
+
+
+            } catch (error) {
+                console.error("Error fetching session details:", error);
+            }
+        };
+        fetchSessionDetails();
+    }
+
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
             const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+            console.log("Fetching trade sessions from:", inf_url);
             const response = await axios.get(`${inf_url}/api/trade_sessions/`);
-            setSessions(response.data);
+            // console.log("API data sample:", {
+            //     firstItem: response.data[0],
+            //     keys: Object.keys(response.data[0]),
+            //     types: {
+            //         trade_start: typeof response.data[0].trade_start,
+            //         trade_end: typeof response.data[0].trade_end
+            //     }
+            // });
+            const sessionsWithDates = response.data.map(session => ({
+                ...session,
+                // Preserve original string dates for debugging
+                original_start: session.trade_start,
+                original_end: session.trade_end,
+                // Convert to Date objects
+                trade_start: new Date(session.trade_start),
+                trade_end: new Date(session.trade_end)
+            }));
+            setSessions(sessionsWithDates);
+            console.log("Fetched trade sessions:", sessionsWithDates);
+            setLoading(false);
         };
         fetchData();
     }, []);
 
     const handleDelete = async (id: number) => {
-        await axios.delete(`${process.env.NEXT_PUBLIC_INFERENCE_URL}/api/trade_sessions/${id}/`);
+        await axios.delete(`${process.env.NEXT_PUBLIC_INF_URL}/api/trade_sessions/${id}/`);
         setSessions(sessions.filter(session => session.id !== id));
     };
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!currentSession) return;
-
-        const inf_url = process.env.NEXT_PUBLIC_INFERENCE_URL;
+        
+        const inf_url = process.env.NEXT_PUBLIC_INF_URL;
         if (currentSession) {
+            if (timeRange.start === null || timeRange.end === null) {
+                alert("Please select a valid time range.");
+                return;
+            }
+            // console.log("Trade start : ", timeRange.start);
+            // console.log("Trade end : ", timeRange.end);
+            currentSession.trade_start = timeRange.start;
+            currentSession.trade_end = timeRange.end;
+            currentSession.model_high_alias = model_high_alias;
+            currentSession.model_high_version = model_high_version;
+            currentSession.model_low_alias = model_low_alias;
+            currentSession.model_low_version = model_low_version;
+            console.log("Time start :", timeRange.start);
+
             const response = currentSession.id
                 ? await axios.put(`${inf_url}/api/trade_sessions/${currentSession.id}/`, currentSession)
                 : await axios.post(`${inf_url}/api/trade_sessions/`, currentSession);
@@ -58,6 +200,25 @@ export default function TradeSessionsTable() {
         setOpen(false);
     };
 
+    const formatDateForGrid = (value: Date | string | null): string => {
+        //console.log("Formatting date for grid:", value);
+        if (!value) return '+';
+        
+        try {
+            const date = value instanceof Date ? value : new Date(value);
+            return isNaN(date.getTime()) 
+                ? '+' 
+                : date.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+        } catch {
+            return '*';
+        }
+    };
 
     // Column Configuration
     const columns: GridColDef[] = [
@@ -66,12 +227,18 @@ export default function TradeSessionsTable() {
         { field: 'trade_start', 
             headerName: 'Trade Start', 
             width: 180,
-            valueFormatter: (params) => params.value ? new Date(params.value).toLocaleString() : '-',
+            renderCell: (params) => {
+                const value = params.row.trade_start;
+                return formatDateForGrid(value);
+            }
         },
         {   field: 'trade_end', 
             headerName: 'Trade End', 
             width: 180,
-            valueFormatter: (params) => params.value ? new Date(params.value).toLocaleString() : '-',
+            renderCell: (params) => {
+                const value = params.row.trade_end;
+                return formatDateForGrid(value);
+            }
         },
         { field: 'model_high_version', headerName: 'Model High Version', width: 180 },
         { field: 'model_high_alias', headerName: 'Model High Alias', width: 180 },
@@ -107,15 +274,9 @@ export default function TradeSessionsTable() {
             variant="contained"
             sx={{mb: 2}}
             onClick={() => {
-                setCurrentSession({ id: 0, 
-                    type: 'trade', 
-                    symbol: '', 
-                    trade_start: '', 
-                    trade_end: '', 
-                    model_high_version: 0, 
-                    model_high_alias: '', 
-                    model_low_version: 0, 
-                    model_low_alias: '' 
+                setCurrentSession({...currentSession,
+                    type: 'Simulated', 
+                    symbol: 'SPY', 
                 });
                 setOpen(true);
             }}
@@ -130,6 +291,9 @@ export default function TradeSessionsTable() {
                 rowsPerPageOptions={[10]}
                 checkboxSelection
                 disableSelectionOnClick
+                onRowSelectionModelChange={handleRowSelection}
+                loading={loading}
+                getRowId={(row) => row.id}
             />
 
             <Dialog open={open} onClose={() => setOpen(false)}>
@@ -141,50 +305,6 @@ export default function TradeSessionsTable() {
                             label="Symbol"
                             value={currentSession?.symbol || ''}
                             onChange={(e) => setCurrentSession({ ...currentSession, symbol: e.target.value })}
-                            fullWidth
-                            margin="normal"
-                        />
-                        <TextField
-                            label="Trade Start"
-                            type="datetime-local"
-                            value={currentSession?.trade_start || ''}
-                            onChange={(e) => setCurrentSession({ ...currentSession, trade_start: e.target.value })}
-                            fullWidth
-                            margin="normal"
-                        />
-                        <TextField
-                            label="Trade End"
-                            type="datetime-local"
-                            value={currentSession?.trade_end || ''}
-                            onChange={(e) => setCurrentSession({ ...currentSession, trade_end: e.target.value })}
-                            fullWidth
-                            margin="normal"
-                        />
-                        <TextField
-                            label="Model High Version"
-                            value={currentSession?.model_high_version || ''}
-                            onChange={(e) => setCurrentSession({ ...currentSession, model_high_version: e.target.value })}
-                            fullWidth
-                            margin="normal"
-                        />
-                        <TextField
-                            label="Model High Alias"
-                            value={currentSession?.model_high_alias || ''}
-                            onChange={(e) => setCurrentSession({ ...currentSession, model_high_alias: e.target.value })}
-                            fullWidth
-                            margin="normal"
-                        />
-                        <TextField
-                            label="Model Low Version"
-                            value={currentSession?.model_low_version || ''}
-                            onChange={(e) => setCurrentSession({ ...currentSession, model_low_version: e.target.value })}
-                            fullWidth
-                            margin="normal"
-                        />
-                        <TextField
-                            label="Model Low Alias"
-                            value={currentSession?.model_low_alias || ''}
-                            onChange={(e) => setCurrentSession({ ...currentSession, model_low_alias: e.target.value })}
                             fullWidth
                             margin="normal"
                         />

@@ -15,6 +15,9 @@ import commonClasses from "@/components/sciChart/sciChart.module.scss";
 import { initializeCandleStickChart } from "@/components/sciChart/initializeCandleStickChart";
 import { Button, ButtonGroup, MenuItem, Select, TextField } from "@mui/material";
 
+import { usePageContext } from "@/context/PageContext";
+
+
 // If you want to keep using makeStyles:
 import { makeStyles } from "tss-react/mui";
 
@@ -39,10 +42,11 @@ const STORAGE_KEY = "Annotated-Charts";
 // React component needed as our examples app is react.
 // SciChart can be used in Angular, Vue, Blazor and vanilla JS! See our Github repo for more info
 export default function UserAnnotatedStockChart() {
-    const sciChartSurfaceRef = React.useRef<SciChartSurface>(undefined);
-    const controlsRef = React.useRef<TResolvedReturnType<typeof initializeCandleStickChart>["controls"]>(undefined);
+    // const sciChartSurfaceRef = React.useRef<SciChartSurface>(undefined);
+    // const controlsRef = React.useRef<TResolvedReturnType<typeof initializeCandleStickChart>["controls"]>(undefined);
+    const { sciChartSurfaceRef, chartControlsRef , candleDataSeriesRef } = usePageContext();
     const [name, setName] = React.useState<string>("");
-    const [chartMode, setChartMode] = React.useState<"line" | "marker" | "pan">("line");
+    const [chartMode, setChartMode] = React.useState<"line" | "marker" | "pan" | "horline">("pan");
     const [savedCharts, setSavedCharts] = React.useState<Record<string, object>>({});
     const [selectedChart, setSelectedChart] = React.useState<string>("");
 
@@ -55,7 +59,7 @@ export default function UserAnnotatedStockChart() {
     const handleToggleButtonChanged = (event: any, state: "pan" | "line" | "marker" | "horline") => {
         if (state === null) return;
         setChartMode(state);
-        controlsRef.current.setChartMode(state);
+        chartControlsRef.current.setChartMode(state);
     };
 
     const handleNameChanged = (event: any) => {
@@ -67,7 +71,7 @@ export default function UserAnnotatedStockChart() {
     };
 
     const saveChart = (event: any) => {
-        savedCharts[name] = controlsRef.current.getDefinition();
+        savedCharts[name] = chartControlsRef.current.getDefinition();
         if (localStorageApi.storageAvailable()) {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(savedCharts));
         }
@@ -77,11 +81,11 @@ export default function UserAnnotatedStockChart() {
     const loadChart = (event: any) => {
         const definition = savedCharts[selectedChart];
         setName(selectedChart);
-        controlsRef.current.resetChart();
-        controlsRef.current.applyDefinition(definition);
+        chartControlsRef.current.resetChart();
+        chartControlsRef.current.applyDefinition(definition);
     };
     const resetChart = (event: any) => {
-        controlsRef.current.resetChart();
+        chartControlsRef.current.resetChart();
     };
 
     const { classes } = useStyles();
@@ -190,10 +194,10 @@ export default function UserAnnotatedStockChart() {
                     </div>
                     <SciChartReact
                         className={classes.chartArea}
-                        initChart={initializeCandleStickChart}
+                        initChart={(divElementId) => initializeCandleStickChart(divElementId, candleDataSeriesRef)}
                         onInit={({ sciChartSurface, controls }: TResolvedReturnType<typeof initializeCandleStickChart>) => {
                             sciChartSurfaceRef.current = sciChartSurface;
-                            controlsRef.current = controls;
+                            chartControlsRef.current = controls;
                         }}
                     />
                 </div>

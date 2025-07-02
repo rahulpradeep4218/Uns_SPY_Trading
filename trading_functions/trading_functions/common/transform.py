@@ -37,6 +37,7 @@ def close_diff_transform(df, config):
     cfg = config['common_config']
     #close_diff_features = cfg['close_transform_columns'].split(',')
     close_diff_features = get_columns_mapping(cfg['close_transform_columns'], config)
+    #print(f"Applying close difference transformation on features: {close_diff_features}")
     # Transform the 'Close' column
     df[close_diff_features] = df[close_diff_features].sub(df['Close'], axis=0).div(df['Close'], axis=0)
     return df, close_diff_features

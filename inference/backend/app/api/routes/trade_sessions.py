@@ -53,15 +53,14 @@ def update_trade_session(
         raise HTTPException(status_code=404, detail="Trade session not found")
     return updated_session
 
-@router.delete("/{session_id}", response_model=schemas.TradeSessionResponse)
+@router.delete("/{session_id}", status_code=204)
 def delete_trade_session(
     session_id: int, 
     db: Session = Depends(get_db)
-) -> schemas.TradeSessionResponse:
+):
     """
     Delete a trade session by its ID.
     """
-    deleted_session = crud.delete_trade_session(db, session_id=session_id)
-    if not deleted_session:
+    success = crud.delete_trade_session(db, session_id=session_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Trade session not found")
-    return deleted_session

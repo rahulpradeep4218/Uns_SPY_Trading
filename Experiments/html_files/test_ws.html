@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Simulation WebSocket Test</title>
+</head>
+<body>
+  <h2>Simulation WebSocket Test</h2>
+  <textarea id="log" rows="20" cols="100" readonly></textarea><br>
+  <button onclick="start()">Connect & Start Simulation</button>
+
+  <script>
+    let socket;
+
+    function log(msg) {
+      const logBox = document.getElementById("log");
+      logBox.value += msg + "\\n";
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function start() {
+        session_id = "4"
+      socket = new WebSocket("ws://localhost:8000/api/process/ws/simulation/" + session_id);
+
+      socket.onopen = () => {
+        log("✅ Connected to WebSocket");
+
+        // Send simulation options
+        socket.send(JSON.stringify({
+          options: {
+            close_at_eod: true,
+            max_hold_time: 120,
+            sl_type: "percent",
+            sl_value: 0.02,
+            tp_type: "percent",
+            tp_value: 0.05,
+            max_gap_days_allowed: 4,
+            sell_or_buy_threshold: 3,
+            risk_threshold: 0.8,
+            allow_multiple_open_trades: true,
+            close_using_signal: false,
+            start_time: "2024-01-12T12:40:00",
+            end_time: "2024-01-12T12:45:00",
+            speed: 2.0
+          },
+          training_config: {},  // send minimal or dummy if unused
+          model_high: null,
+          model_low: null,
+          scalers: {}
+        }));
+      };
+
+      socket.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        log(`📩 ${msg.type}: ${JSON.stringify(msg.data)}`);
+      };
+
+      socket.onerror = (e) => log("❌ WebSocket error: " + e.message);
+      socket.onclose = () => log("🔌 Connection closed");
+    }
+  </script>
+</body>
+</html>

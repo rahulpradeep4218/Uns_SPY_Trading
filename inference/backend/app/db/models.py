@@ -34,10 +34,17 @@ class TradeRecord(Base):
     high_val: Mapped[float] = mapped_column(Float)
     low_val: Mapped[float] = mapped_column(Float)
     signal: Mapped[int] = mapped_column(Integer, default=0)
-    realized: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String, default="SIGNAL")
     entry_price: Mapped[Optional[float]] = mapped_column(Float)
     exit_price: Mapped[Optional[float]] = mapped_column(Float)
+    buy_stop_loss: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    buy_take_profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    sell_stop_loss: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    sell_take_profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    calc_stop_loss: Mapped[Optional[float]] = mapped_column(Float, default=None)  # Calculated stop loss
+    calc_take_profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
     profit: Mapped[float] = mapped_column(Float, default=0.0)
+    exit_reason: Mapped[Optional[str]] = mapped_column(String, default=None)  # e.g., "stop_loss", "take_profit", "max_hold_time"
 
     session: Mapped["TradeSession"] = relationship("TradeSession", back_populates="trade_records")
     ohlc_data: Mapped[Optional["PriceData"]] = relationship("PriceData", viewonly=True,

@@ -1,3 +1,5 @@
+import { DateTime } from "luxon";
+
 import {
     AnnotationClickEventArgs,
     buildDataSeries,
@@ -46,6 +48,10 @@ import {
     XyMovingAverageFilter,
     ZoomExtentsModifier,
     ZoomPanModifier,
+    LabelProviderBase2D,
+    EAxisType,
+    DateLabelProvider,
+    DataLabelProvider
 } from "scichart";
 
 import { appTheme } from "@/app/theme";
@@ -55,6 +61,9 @@ import { CreateHorizontalLineModifier } from "@/components/sciChart/CreateHorizL
 import { CreateTradeMarkerModifier } from "@/components/sciChart/CreateTradeMarkerModifier";
 import { ExampleDataProvider } from "@/components/sciChart/ExampleDataProvider";
 import { VerticalYRulerModifier } from "@/components/sciChart/RulerModifier";
+import { OHLCDataPoint } from "@/app/types";
+
+import { usePageContext } from "@/context/PageContext";
 
 const deleteOnClick = (args: AnnotationClickEventArgs) => {
     if (args.sender.isSelected && args.mouseArgs.ctrlKey) {
@@ -69,53 +78,52 @@ function optimalDataPointWidth(xVal: number[]){
     const xMax = xVal[xVal.length - 1];
     const totalTimeRange = xMax - xMin;
     console.log("Total time range:", totalTimeRange);
-    const expectedCandleCount = totalTimeRange / (60 * 250); // Assuming 1 minute candles
+    const expectedCandleCount = totalTimeRange / (60*180000); // Assuming 1 minute candles
     console.log("Expected candle count:", expectedCandleCount);
-    const returnVal = Math.min(0.8, Math.max(0.000000000000001, 0.8 / expectedCandleCount)); 
+    const returnVal = Math.min(0.8, Math.max(0.00000000000000001, 0.8 / expectedCandleCount)); 
     console.log("Calculated dataPointWidth:", returnVal);
     return returnVal;
 }
-export const initializeCandleStickChart = async (divElementId: string | HTMLDivElement) => {
+export const initializeCandleStickChart = async (
+    divElementId: string | HTMLDivElement,
+    candleDataSeriesRef: React.RefObject<OhlcDataSeries | null>
+) => {
     const { sciChartSurface, wasmContext } = await SciChartSurface.create(divElementId, {
         theme: appTheme.SciChartJsTheme
     });
-
     
     const inf_url = process.env.NEXT_PUBLIC_INF_URL;
     const res = await fetch(`${inf_url}/api/price_data/SPY`)
     const ohlcData = await res.json();
 
-    // const day = 24 * 60 * 60;
-    // const startDate = new Date(Date.now() - 300 * day);
-    // const { xValues, openValues, highValues, lowValues, closeValues } = ExampleDataProvider.getRandomOHLCVData(
-    //     300,
-    //     1.5,
-    //     startDate,
-    //     day
-    // );
+    const utcProvider = new SmartDateLabelProvider({
+        labelFormat: ENumericFormat.Date_HHMM,
+        cursorLabelFormat: ENumericFormat.Date_HHMM,
+    });
 
-    // // Create and add the Candlestick series
-    // // The Candlestick Series requires a special dataseries type called OhlcDataSeries with o,h,l,c and date values
-    // const candleDataSeries = new OhlcDataSeries(wasmContext, {
-    //     xValues,
-    //     openValues,
-    //     highValues,
-    //     lowValues,
-    //     closeValues,
-    //     dataSeriesName: "BTC/USDT",
-    // });
+    utcProvider.formatLabel = (value: number) => 
+        DateTime
+            .fromMillis(value, { zone: "America/New_York" })
+            .toFormat("HH:mm");
+
+    utcProvider.formatCursorLabel = (value: number) => 
+        DateTime
+            .fromMillis(value, { zone: "America/New_York" })
+            .toFormat("yyyy-MM-dd HH:mm");
+    
     const xValues = ohlcData.map((item: any) => {
-        const ts = new Date(item.time).getTime()/1000; 
-        if (isNaN(ts)) {
-            console.error("Invalid timestamp in OHLC data:", item.time);
+        const dt = DateTime.fromISO(item.time, "yyyy-MM-dd HH:mm:ss", { zone: "America/New_York" });
+        if (!dt.isValid) {
+            console.error("Invalid date in OHLC data:", item.time);
+            return null; // or handle the error as needed
         }
-        return ts;
+        return dt.toMillis();
     });
     const openValues = ohlcData.map((item: any) => item.open);
     const highValues = ohlcData.map((item: any) => item.high);
     const lowValues = ohlcData.map((item: any) => item.low);
     const closeValues = ohlcData.map((item: any) => item.close);
-    console.log("xValues preview:", xValues.slice(0, 5).map(ts => new Date(ts * 1000).toISOString()));
+
     const candleDataSeries = new OhlcDataSeries(wasmContext, {
         xValues: xValues,
         openValues: openValues,
@@ -124,10 +132,10 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         closeValues: closeValues,
         dataSeriesName: "Rahul Random Candles",
     });
-            
+    candleDataSeriesRef.current = candleDataSeries;      
     const candlestickSeries = new FastCandlestickRenderableSeries(wasmContext, {
         id: "Candles",
-        dataSeries: candleDataSeries,
+        dataSeries: candleDataSeriesRef.current,
         //dataPointWidth: 0.005, // width of the candle
         
         dataPointWidth: optimalDataPointWidth(xValues), // width of the candle
@@ -168,16 +176,6 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         axisLabelFill: appTheme.VividOrange,
         tooltipLegendTemplate: getTooltipLegendTemplate,
         showAxisLabels: true,
-        xAxisLabelFormatter: (dateValue: number) => {
-            return new Date(dateValue).toLocaleTimeString([], { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                second: '2-digit',
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-            });
-        }
     });
 
 
@@ -203,11 +201,7 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
         majorDelta: 1,
         minorDelta: 0.2,
         growBy: new NumberRange(0.05, 0.05),
-        labelProvider: new SmartDateLabelProvider({
-            labelFormat: ENumericFormat.Date_HHMM,
-            cursorLabelFormat: ENumericFormat.Date_DDMMHHMM,
-        }),
-        cursorLabelFormat: ENumericFormat.Date_HHMM,
+        labelProvider: utcProvider,
     });
     sciChartSurface.xAxes.add(xAxis);
 
@@ -280,7 +274,18 @@ export const initializeCandleStickChart = async (divElementId: string | HTMLDivE
     };
 
     resetChart();
-    setChartMode("line");
+    setChartMode("pan");
+    const appendCandle = (candle: OHLCDataPoint) => {
+        const millis = DateTime.fromISO(candle.time, { zone: "America/New_York" }).toMillis();
+        candleDataSeries.append(millis, candle.open, candle.high, candle.low, candle.close, candle.volume);
+
+        const xAxis = sciChartSurface.xAxes.get(0);
+        const vr = xAxis.visibleRange;
+        if (millis > vr.max) {
+            const newMin = millis - (vr.max - vr.min);
+            xAxis.visibleRange = new NumberRange(newMin, millis);
+        }
+    };
 
     return {
         sciChartSurface,

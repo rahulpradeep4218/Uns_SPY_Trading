@@ -1,9 +1,10 @@
 from pyexpat import model
+from sys import version
 
 from sympy import im
 from torch import mode
 
-from trading_functions.training.utility import get_columns_mapping
+from trading_functions.training.utility import get_columns_mapping, get_all_training_features
 from trading_functions.common.logging_config import logger
 from trading_functions.common.transform import normalize_timegaps, close_diff_transform
 from trading_functions.common.indicators import add_all_indicators
@@ -42,8 +43,16 @@ def scale_for_inference(data, config, scalers):
     else:
         logger.debug("No Robust scaler found or no features to scale.")
 
+def get_model_from_mlflow(config, model_name="", model_version=None):
+    mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
+    model = mlflow.pyfunc.load_model(
+        f"models:/{model_name}/{model_version}"
+    )
+    return model
 
-def download_artifacts(config, dev=False, mlflow_uri=None):
+
+
+def download_artifacts(config, alias="dev", mlflow_uri=None):
     ml_client = MlflowClient()
 
     if mlflow_uri:
@@ -53,7 +62,7 @@ def download_artifacts(config, dev=False, mlflow_uri=None):
         logger.info("Using default MLflow tracking URI from config.")
         mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
     high_model_name = config['mlflow']['high_model_name']
-    alias = 'dev' if dev else 'prod'
+ 
     logger.info(f"Using model alias: {alias} for model: {high_model_name}")
     artifact_download_path = config['mlflow']['artifact_download_path']
 
@@ -116,9 +125,10 @@ def transform_for_inference(data, config, scalers):
     logger.debug("Normalized time gaps in the data.")
 
     # Add indicators if needed
-    data = add_all_indicators(data, config)
-    logger.debug("Added indicators to the data.")
-
+    data, selected_indicators = add_all_indicators(data, config)
+    logger.debug(f"Added indicators to the data : {selected_indicators}")
+    #print(f"Shape after adding indicators: {data.shape}")
+    #print("Columns after adding indicators:", data.columns.tolist())
     # Close difference transformation
     data, close_diff_features = close_diff_transform(data, config)
     logger.debug(f"Applied close difference transformation on features: {close_diff_features}")
@@ -128,6 +138,49 @@ def transform_for_inference(data, config, scalers):
 
     logger.debug("Data transformation for inference completed.")
     return data
+
+
+def get_prediction(data, model_high, model_low, training_config, scalers):
+    """
+    Get predictions from the high and low models.
+    """
+    max_period = get_maximum_period(training_config)
+    # Filter last max period rows
+    data = data.tail(max_period+1)
+    #print(f"Shape : {data.shape}")
+    #print(data)
+    data = transform_for_inference(data=data, config=training_config, scalers=scalers)
+    data_lastrow = data.iloc[[-1]]
+    all_features = get_all_training_features(training_config)
+    current_close = data_lastrow['Close'].values[0]
+    features_row = data_lastrow[all_features]
+    buy_vals = model_high.predict(features_row)
+    sell_vals = model_low.predict(features_row)
+
+    buy_take, sell_take = buy_vals[0][0], sell_vals[0][0]
+    buy_stop, sell_stop = sell_vals[0][1], buy_vals[0][1]
+    label_scaling_multiplier = training_config['common_config']['label_scaling_multiplier']
+
+    buy_take = buy_take * current_close / label_scaling_multiplier
+    buy_take = buy_take + current_close
+
+    sell_take = sell_take * current_close / label_scaling_multiplier
+    sell_take = current_close - sell_take
+
+    buy_stop = buy_stop * current_close / label_scaling_multiplier
+    buy_stop = current_close - buy_stop
+
+    sell_stop = sell_stop * current_close / label_scaling_multiplier
+    sell_stop = sell_stop + current_close
+    return {
+        "buy_take": buy_take,
+        "buy_stop": buy_stop,
+        "sell_take": sell_take,
+        "sell_stop": sell_stop,
+        "current_close": current_close
+    }
+
+
 
 
 def make_random_candles(n, freq_minutes):
@@ -174,13 +227,36 @@ def mlflow_aliases(config):
 
     client = MlflowClient()
     for model in models:
-        aliases = set()
+        alias_version_map = {}
+        version_alias_map = {}
+
         versions = client.search_model_versions(f"name='{model}'")
-        print(f"Versions : {versions}")
         for v in versions:
             mv = client.get_model_version(name=model, version=v.version)
             if mv.aliases:
-                aliases.update(mv.aliases)
+                for alias in mv.aliases:
+                    if alias not in version_alias_map:
+                        version_alias_map[alias] = []
+                    version_alias_map[alias].append(mv.version)
+        
+        for alias, versions in version_alias_map.items():
+            if versions:
+                numeric_versions = [int(v) for v in versions]
+                latest_version = max(numeric_versions)
+                alias_version_map[alias] = latest_version
 
-        result[model] = aliases
+        result[model] = alias_version_map
     return result
+
+
+def get_maximum_period(config):
+    """
+    Get the maximum period for inference from the config.
+    """
+    max_period = 0
+    for ind_key in config['indicators']['parameters']:
+        ind = config['indicators']['parameters'][ind_key]
+        if 'period' in ind and isinstance(ind['period'], int):
+            if ind['period'] > max_period:
+                max_period = ind['period']
+    return max_period
