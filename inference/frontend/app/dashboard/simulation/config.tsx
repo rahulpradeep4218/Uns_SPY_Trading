@@ -15,6 +15,8 @@ export default function SimulationConfig() {
         setModelLowAlias, 
         setModelHighVersion,
         setModelLowVersion,
+        setTrainingStart,
+        setTrainingEnd,
         timeRange,
         setTimeRange,
         showTimePickerFor,
@@ -85,7 +87,7 @@ export default function SimulationConfig() {
         const fetchModelAliases = async ()=> {
             try{
                 const inf_url = process.env.NEXT_PUBLIC_INF_URL;
-                const res = await fetch(`${inf_url}/api/mlflow/aliases`);
+                const res = await fetch(`${inf_url}/api/mlflow/models_info`);
                 const data = await res.json();
                 console.log("Model Aliases:", data);
                 return data;
@@ -107,13 +109,19 @@ export default function SimulationConfig() {
                             value={model_high_alias || ''}
                             onChange={(e) => {
                                 setModelHighAlias(e.target.value);
-                                setModelHighVersion(modelAliases_mlflow[high_model_name][e.target.value] || '');
+                                setModelHighVersion(modelAliases_mlflow[high_model_name][e.target.value]['version'] || '');
+                                if (modelAliases_mlflow[high_model_name][e.target.value]['training_start']) {
+                                    setTrainingStart(modelAliases_mlflow[high_model_name][e.target.value]['training_start']);
+                                }
+                                if (modelAliases_mlflow[high_model_name][e.target.value]['training_end']) {
+                                    setTrainingEnd(modelAliases_mlflow[high_model_name][e.target.value]['training_end']);
+                                }
                             }}
                         >
                             <option value="">Select High Model Alias</option>
                             {Object.keys(modelAliases_mlflow[high_model_name] || {}).map((al) => (
                                 <option key={al} value={al}>
-                                    {al} (v{modelAliases_mlflow[high_model_name][al]})
+                                    {al} (v{modelAliases_mlflow[high_model_name][al]['version']})
                                 </option>
                             ))}
                         </select>
@@ -126,13 +134,13 @@ export default function SimulationConfig() {
                             value={model_low_alias || ''}
                             onChange={(e) => {
                                 setModelLowAlias(e.target.value);
-                                setModelLowVersion(modelAliases_mlflow[low_model_name][e.target.value] || '');
+                                setModelLowVersion(modelAliases_mlflow[low_model_name][e.target.value]['version'] || '');
                             }}
                         >
                             <option value="">Select Low Model Alias</option>
                             {Object.keys(modelAliases_mlflow[low_model_name] || {}).map((al) => (
                                 <option key={al} value={al}>
-                                    {al} (v{modelAliases_mlflow[low_model_name][al]})
+                                    {al} (v{modelAliases_mlflow[low_model_name][al]['version']})
                                 </option>
                             ))}
                         </select>

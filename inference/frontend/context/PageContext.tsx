@@ -20,6 +20,10 @@ type PageContextType = {
     model_low_version: number;
     setModelLowVersion: (value: number) => void;
     selected_session: number | null;
+    training_start: string | null;
+    setTrainingStart: (start: string | null) => void;
+    training_end: string | null;
+    setTrainingEnd: (end: string | null) => void;
     setSelectedSession: (sessionId: number | null) => void;
     timeRange: {
         start: string | null;
@@ -60,6 +64,8 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
     const [model_low_alias, setModelLowAlias] = useState<string>('');
     const [model_high_version, setModelHighVersion] = useState<string>('');
     const [model_low_version, setModelLowVersion] = useState<string>('');
+    const [training_start, setTrainingStart] = useState<string | null>(null);
+    const [training_end, setTrainingEnd] = useState<string | null>(null);
     const [selected_session, setSelectedSession] = useState<number | null>(null);
     const [timeRange, setTimeRange] = useState<{ start: string | null; end: string | null }>({
         start: null,
@@ -103,6 +109,10 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
             setModelHighVersion,
             model_low_version,
             setModelLowVersion,
+            training_start,
+            setTrainingStart,
+            training_end,
+            setTrainingEnd,
             timeRange,
             setTimeRange,
             showTimePickerFor,

@@ -11,6 +11,8 @@ import { set, throttle } from 'lodash';
 import Slider from '@mui/material/Slider';
 import { styled } from '@mui/material/styles';
 
+import { usePageContext } from '@/context/PageContext';
+
 
 const RangeSliderContainer = styled('div')({
   padding: '20px 40px',
@@ -55,6 +57,7 @@ export default function TimelineSelection({
         selectedStart,
         selectedEnd  
     } : TimelineSelectionProps) {
+    const { training_start, training_end } = usePageContext();
     const chartRef = useRef<any>(null);
     const [dataRange, setDataRange] = useState<DataRange | null>(null);
     const [cursorPosition, setCursorPosition] = useState<number | null>(null);
@@ -79,21 +82,33 @@ export default function TimelineSelection({
                 const data = await response.json();
                 setDataRange(data);
 
-                //Calculate extended range
-                const extendedStart = new Date(data.start);
-                extendedStart.setDate(extendedStart.getDate() - 5); // Extend start by five days
-                const extendedEnd = new Date(data.end);
-                extendedEnd.setDate(extendedEnd.getDate() + 5); // Extend end by
+                const trainingStartTime = training_start ? new Date(training_start).getTime() : null;
+                const trainingEndTime = training_end ? new Date(training_end).getTime() : null;
 
-                const fullStart = extendedStart.getTime();
-                const fullEnd = extendedEnd.getTime();
+                const coverageStart = new Date(data.start).getTime();
+                const coverageEnd = new Date(data.end).getTime();
+
+                const allStarts = [coverageStart];
+                const allEnds = [coverageEnd];
+                if (trainingStartTime) allStarts.push(trainingStartTime);
+                if (trainingEndTime) allEnds.push(trainingEndTime);
+
+                //Calculate extended range
+                const extendedStart = new Date(Math.min(...allStarts));
+                extendedStart.setDate(extendedStart.getDate() - 5); // Extend start by five days
+
+                const extendedEnd = new Date(Math.max(...allEnds));
+                extendedEnd.setDate(extendedEnd.getDate() + 5); // Extend end by five days
+
+                
+
                 setFullRange({
-                    start: fullStart,
-                    end: fullEnd
+                    start: extendedStart.getTime(),
+                    end: extendedEnd.getTime()
                 });
                 setZoomRange({
-                    min: fullStart,
-                    max: fullEnd
+                    min: extendedStart.getTime(),
+                    max: extendedEnd.getTime()
                 });
 
             } catch (error) {
@@ -259,7 +274,7 @@ export default function TimelineSelection({
     dataRange.coverage.forEach((cov: Coverage, i: number) => {
         const xMin = new Date(cov.start).getTime();
         const xMax = new Date(cov.end).getTime();
-        console.log(`Coverage ${i}:`, xMin, xMax);
+        //console.log(`Coverage ${i}:`, xMin, xMax);
         let labelText = "Coverage";
         if (cov.start === null) labelText = "No data before";
         else if (cov.end === null) labelText = "No data after";
@@ -281,6 +296,30 @@ export default function TimelineSelection({
             },
         };
     });
+    if (training_start && training_end){
+        const trainingStartTime = new Date(training_start).getTime();
+        const trainingEndTime = new Date(training_end).getTime();
+        annotations['trainingRange'] = {
+            type: 'box',
+            xMin: trainingStartTime,
+            xMax: trainingEndTime,
+            yMin: -0.5,
+            yMax: 0.5,
+            z: 14,
+            backgroundColor: 'rgba(255, 223, 186, 0.8)', // Light orange
+            borderColor: 'rgb(255, 165, 0)', // Orange border
+            borderWidth: 2,
+            label: {
+                content: `Training Range`,
+                enabled: true,
+                position: 'center',
+                color: 'black',
+                font: {
+                    weight: 'bold',
+                },
+            }
+        };
+    }
 
     if (cursorPosition !== null) {
         annotations['cursorLine'] = {

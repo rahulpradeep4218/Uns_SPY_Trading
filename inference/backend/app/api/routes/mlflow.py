@@ -8,12 +8,12 @@ from fastapi import APIRouter, Depends
 
 router = APIRouter()
 
-@router.get("/aliases")
-def get_mlflow_aliases():
+@router.get("/models_info")
+def get_mlflow_model_info():
     """
-    Get MLflow aliases for models.
+    Get MLflow model information.
     """
     config = get_config()
-    aliases = mlflow_aliases(config)
-    return aliases
+    models_info = mlflow_aliases(config)
+    return models_info
 

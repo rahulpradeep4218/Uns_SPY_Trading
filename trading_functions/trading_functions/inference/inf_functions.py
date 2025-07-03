@@ -227,7 +227,7 @@ def mlflow_aliases(config):
 
     client = MlflowClient()
     for model in models:
-        alias_version_map = {}
+        alias_info_map = {}
         version_alias_map = {}
 
         versions = client.search_model_versions(f"name='{model}'")
@@ -243,9 +243,15 @@ def mlflow_aliases(config):
             if versions:
                 numeric_versions = [int(v) for v in versions]
                 latest_version = max(numeric_versions)
-                alias_version_map[alias] = latest_version
+                mv = client.get_model_version(name=model, version=latest_version)
+                tags = mv.tags if mv.tags else {}
+                alias_info_map[alias] = {
+                    "version": latest_version,
+                    "training_start": tags.get('training_start', ''),
+                    "training_end": tags.get('training_end', ''),
+                }
 
-        result[model] = alias_version_map
+        result[model] = alias_info_map
     return result
 
 
