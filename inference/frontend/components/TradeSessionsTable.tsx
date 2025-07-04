@@ -12,20 +12,7 @@ import { time } from 'console';
 
 import { renderTradeMarkers } from '@/components/sciChart/renderTradeMarkers';
 
-
-interface TradeSession {    
-    id?: number,
-    type: string,
-    symbol: string,
-    trade_start: string | Date,
-    trade_end: string | Date,
-    model_high_version: number,
-    model_high_alias: string,
-    model_low_version: number,
-    model_low_alias: string,
-}
-
-
+import { TradeSession } from '@/app/types';
 
 export default function TradeSessionsTable() {
     const [sessions, setSessions] = useState<TradeSession[]>([]);
@@ -41,6 +28,8 @@ export default function TradeSessionsTable() {
         selected_session, setSelectedSession,
         tradeStats, setTradeStats,
         tradeRecords, setTradeRecords,
+        trainingStart, setTrainingStart,
+        trainingEnd, setTrainingEnd,
         sciChartSurfaceRef,
         tradeMarkerMapRef,
         candleDataSeriesRef
@@ -84,9 +73,29 @@ export default function TradeSessionsTable() {
                     start: session_record.trade_start,
                     end: session_record.trade_end
                 });
+
                 setTradeStats(trade_stats);
                 setTradeRecords(trade_records);
-
+                
+                const fetchModelAliases = async ()=> {
+                    try{
+                        const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+                        const res = await fetch(`${inf_url}/api/mlflow/models_info`);
+                        const data = await res.json();
+                        console.log("Model Aliases:", data);
+                        return data;
+                    } catch (error) {
+                        console.error("Error fetching model aliases:", error);
+                    }
+                };
+                const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
+                const modelAliases_mlflow = await fetchModelAliases();
+                if (modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_start']) {
+                    setTrainingStart(modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_start']);
+                }
+                if (modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_end']) {
+                    setTrainingEnd(modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_end']);
+                }
                 const inf_url = process.env.NEXT_PUBLIC_INF_URL;
                 let ohlcDataUrl = `${inf_url}/api/price_data/${session_record.symbol}`;
                 if (last_trade_signal_time) {
@@ -120,7 +129,7 @@ export default function TradeSessionsTable() {
                 //sciChartSurfaceRef.current?.zoomExtents();
                 renderTradeMarkers(
                         sciChartSurfaceRef.current,
-                        tradeRecords,
+                        trade_records,
                         tradeMarkerMapRef
                     );
 
@@ -137,7 +146,7 @@ export default function TradeSessionsTable() {
             setLoading(true);
             const inf_url = process.env.NEXT_PUBLIC_INF_URL;
             console.log("Fetching trade sessions from:", inf_url);
-            const response = await axios.get(`${inf_url}/api/trade_sessions/`);
+            const response = await axios.get(`${inf_url}/api/trade_sessions?type=Simulated`);
             // console.log("API data sample:", {
             //     firstItem: response.data[0],
             //     keys: Object.keys(response.data[0]),

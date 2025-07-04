@@ -7,8 +7,12 @@ from datetime import datetime
 def get_trade_session(db: Session, session_id: int) -> schemas.TradeSessionResponse:
     return db.query(models.TradeSession).filter(models.TradeSession.id == session_id).first()
 
-def get_trade_sessions(db: Session, skip: int = 0, limit: int = 100) -> list[schemas.TradeSessionResponse]:
-    return db.query(models.TradeSession).offset(skip).limit(limit).all()
+def get_trade_sessions(db: Session, skip: int = 0, limit: int = 100, type: str = None) -> list[schemas.TradeSessionResponse]:
+    query = db.query(models.TradeSession)
+    if type:
+        query = query.filter(models.TradeSession.type == type)
+    query = query.offset(skip).limit(limit)
+    return query.all()
 
 def create_trade_session(db: Session, session: schemas.TradeSessionCreate) -> schemas.TradeSessionResponse:
     db_session = models.TradeSession(**session.model_dump())
@@ -17,11 +21,12 @@ def create_trade_session(db: Session, session: schemas.TradeSessionCreate) -> sc
     db.refresh(db_session)
     return db_session
 
-def update_trade_session(db: Session, session_id: int, session: schemas.TradeSessionCreate) -> schemas.TradeSessionResponse:
+def update_trade_session(db: Session, session_id: int, session: schemas.TradeSessionUpdate) -> schemas.TradeSessionResponse:
     db_session = db.query(models.TradeSession).filter(models.TradeSession.id == session_id).first()
     if db_session:
-        for key, value in session.model_dump().items():
+        for key, value in session.model_dump(exclude_unset=True).items():
             setattr(db_session, key, value)
+        print("Updated session data:", db_session)
         db.commit()
         db.refresh(db_session)
     return db_session

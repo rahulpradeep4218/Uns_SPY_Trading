@@ -59,6 +59,16 @@ class TradeSessionBase(BaseModel):
 class TradeSessionCreate(TradeSessionBase):
     pass
 
+class TradeSessionUpdate(BaseModel):
+    type: Optional[str] = None
+    symbol: Optional[str] = None
+    trade_start: Optional[datetime] = None
+    trade_end: Optional[datetime] = None
+    model_high_version: Optional[int] = None
+    model_high_alias: Optional[str] = None
+    model_low_version: Optional[int] = None
+    model_low_alias: Optional[str] = None
+
 class TradeSessionResponse(TradeSessionBase):
     id: int
     trade_records: Optional[List[TradeRecordResponse]] = []

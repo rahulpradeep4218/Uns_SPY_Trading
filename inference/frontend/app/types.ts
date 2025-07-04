@@ -1,3 +1,15 @@
+export interface TradeSession {    
+    id?: number,
+    type: string,
+    symbol: string,
+    trade_start: string | Date,
+    trade_end: string | Date,
+    model_high_version: number,
+    model_high_alias: string,
+    model_low_version: number,
+    model_low_alias: string,
+}
+
 export interface TradeRecord {
     trade_time: string | Date;
     entry_price: number;
