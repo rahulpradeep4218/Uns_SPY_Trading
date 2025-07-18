@@ -2,7 +2,6 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from torch import seed
 from app.db import models, schemas
 from app.api.deps import get_db
 from typing import List, Dict

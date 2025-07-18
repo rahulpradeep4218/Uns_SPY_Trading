@@ -37,7 +37,7 @@ export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
                     <TableBody>
                         {trades.map((trade) => (
                             <TableRow 
-                                key={trade.trade_time}
+                                key={String(trade.trade_time)}
                                 hover
                                 sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                                 >

@@ -1,13 +1,13 @@
 export interface TradeSession {    
     id?: number,
-    type: string,
+    type?: string,
     symbol: string,
-    trade_start: string | Date,
-    trade_end: string | Date,
-    model_high_version: number,
-    model_high_alias: string,
-    model_low_version: number,
-    model_low_alias: string,
+    trade_start?: string | Date,
+    trade_end?: string | Date,
+    model_high_version?: number,
+    model_high_alias?: string,
+    model_low_version?: number,
+    model_low_alias?: string,
 }
 
 export interface TradeRecord {
@@ -40,18 +40,18 @@ export interface TradeStats {
 }
 
 export interface SimulationOptions {
-    close_at_eod: boolean;
-    max_hold_time: number;
-    sl_type: "percent" | "abs" | "model";
-    sl_value: number;
-    tp_type: "abs" | "model";
-    tp_value: number;
-    max_gap_days_allowed: number;
-    sell_or_buy_threshold: number;
-    risk_threshold: number;
-    allow_multiple_open_trades: boolean;
-    close_using_signal: boolean;
-    speed: number;
+    close_at_eod?: boolean;
+    max_hold_time?: number;
+    sl_type?: "percent" | "abs" | "model";
+    sl_value?: number;
+    tp_type?: "abs" | "model";
+    tp_value?: number;
+    max_gap_days_allowed?: number;
+    sell_or_buy_threshold?: number;
+    risk_threshold?: number;
+    allow_multiple_open_trades?: boolean;
+    close_using_signal?: boolean;
+    speed?: number;
 }
 
 export interface SimulationOptionsFormProps {

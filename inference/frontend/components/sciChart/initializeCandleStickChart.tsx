@@ -112,7 +112,7 @@ export const initializeCandleStickChart = async (
             .toFormat("yyyy-MM-dd HH:mm");
     
     const xValues = ohlcData.map((item: any) => {
-        const dt = DateTime.fromISO(item.time, "yyyy-MM-dd HH:mm:ss", { zone: "America/New_York" });
+        const dt = DateTime.fromISO(item.time, { zone: "America/New_York" });
         if (!dt.isValid) {
             console.error("Invalid date in OHLC data:", item.time);
             return null; // or handle the error as needed
@@ -241,11 +241,11 @@ export const initializeCandleStickChart = async (
             const newData = definition.data.options as TOhlcSeriesData;
             candleDataSeries.clear();
             candleDataSeries.appendRange(
-                newData.xValues,
-                newData.openValues,
-                newData.highValues,
-                newData.lowValues,
-                newData.closeValues
+                newData.xValues!,
+                newData.openValues!,
+                newData.highValues!,
+                newData.lowValues!,
+                newData.closeValues!
             );
         }
     };
@@ -275,17 +275,6 @@ export const initializeCandleStickChart = async (
 
     resetChart();
     setChartMode("pan");
-    const appendCandle = (candle: OHLCDataPoint) => {
-        const millis = DateTime.fromISO(candle.time, { zone: "America/New_York" }).toMillis();
-        candleDataSeries.append(millis, candle.open, candle.high, candle.low, candle.close, candle.volume);
-
-        const xAxis = sciChartSurface.xAxes.get(0);
-        const vr = xAxis.visibleRange;
-        if (millis > vr.max) {
-            const newMin = millis - (vr.max - vr.min);
-            xAxis.visibleRange = new NumberRange(newMin, millis);
-        }
-    };
 
     return {
         sciChartSurface,

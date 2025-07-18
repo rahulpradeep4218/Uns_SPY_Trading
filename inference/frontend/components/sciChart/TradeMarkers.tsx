@@ -65,7 +65,7 @@ export default function TradeSignalControls() {
 
             
             marker.hovered.subscribe((args) => {
-                if (args.isHovered && !slBox && !tpBox) {
+                if (args?.isHovered && !slBox && !tpBox) {
                     const chartStart = surface.xAxes.get(0).visibleRange.min;
                     const chartEnd = surface.xAxes.get(0).visibleRange.max;
 
@@ -132,7 +132,7 @@ export default function TradeSignalControls() {
                     surface.annotations.add(tpLabel);
                     //surface.annotations.add(tpLabel);
 
-                } else if (!args.isHovered) {
+                } else if (!args?.isHovered) {
                     if (slBox) surface.annotations.remove(slBox);
                     if (tpBox) surface.annotations.remove(tpBox);
                     if (slLabel) surface.annotations.remove(slLabel);

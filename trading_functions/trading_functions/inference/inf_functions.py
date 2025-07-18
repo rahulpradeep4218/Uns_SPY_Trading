@@ -1,9 +1,6 @@
 from pyexpat import model
 from sys import version
 
-from sympy import im
-from torch import mode
-
 from trading_functions.training.utility import get_columns_mapping, get_all_training_features
 from trading_functions.common.logging_config import logger
 from trading_functions.common.transform import normalize_timegaps, close_diff_transform
@@ -17,6 +14,7 @@ import pandas as pd
 import numpy as np
 import yaml
 from datetime import datetime, timezone
+
 
 def scale_for_inference(data, config, scalers):
     scale_cfg = config['scaling']
@@ -59,7 +57,7 @@ def download_artifacts(config, alias="dev", mlflow_uri=None):
         logger.info(f"Setting MLflow tracking URI to {mlflow_uri}")
         mlflow.set_tracking_uri(mlflow_uri)
     else:
-        logger.info("Using default MLflow tracking URI from config.")
+        logger.info(f"Using default MLflow tracking URI from config : {config['mlflow']['tracking_uri']}")
         mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
     high_model_name = config['mlflow']['high_model_name']
  
@@ -71,32 +69,49 @@ def download_artifacts(config, alias="dev", mlflow_uri=None):
         alias=alias
     )
     run_id = mv_alias.run_id
-    scaler_artifact_uri = f"runs:/{run_id}/model/scalers.pkl"
-    config_artifact_uri = f"runs:/{run_id}/model/{config['training_details']['mlflow_config_artifact_name']}"
-    logger.info(f"scaler artifact_uri: {scaler_artifact_uri}")
-    logger.info(f"config artifact_uri: {config_artifact_uri}")
+    scaler_artifact_path = "run_model/scalers.pkl"
+    config_artifact_path = f"run_model/{config['training_details']['mlflow_config_artifact_name']}"
+    #scaler_artifact_uri = f"runs:/{run_id}/model/scalers.pkl"
+    #config_artifact_uri = f"runs:/{run_id}/model/{config['training_details']['mlflow_config_artifact_name']}"
+    logger.info(f"scaler path: {scaler_artifact_path}")
+    logger.info(f"config artifact path: {config_artifact_path}")
+    logger.info(f"Run ID: {run_id}")
 
     # If scaler local download directory already exist, delete it
     if os.path.exists(artifact_download_path):
         logger.info(f"Deleting existing scaler directory: {artifact_download_path}")
         shutil.rmtree(artifact_download_path)
     os.makedirs(artifact_download_path, exist_ok=True)
-
+    for a in ml_client.list_artifacts(run_id, path="run_model"):
+        print(f"{a.path}  (dir: {a.is_dir})")
+    logger.info(f"Downloading artifacts to {artifact_download_path}")
     #Download scalers
-    scaler_local_path = mlflow.artifacts.download_artifacts(
-        artifact_uri=scaler_artifact_uri, 
+    scaler_local_path = ml_client.download_artifacts(
+        run_id=run_id,
+        path=scaler_artifact_path,
         dst_path=artifact_download_path
     )
+
+    # scaler_local_path = mlflow.artifacts.download_artifacts(
+    #     artifact_uri=scaler_artifact_uri, 
+    #     dst_path=artifact_download_path
+    # )
     logger.info(f"Scalers downloaded to {scaler_local_path}")
 
     scalers = joblib.load(scaler_local_path)
     logger.info(f"Scalers loaded: {scalers.keys()}")
 
     #Download config
-    config_local_path = mlflow.artifacts.download_artifacts(
-        artifact_uri=config_artifact_uri, 
+    config_local_path = ml_client.download_artifacts(
+        run_id=run_id,
+        path=config_artifact_path,
         dst_path=artifact_download_path
     )
+
+    # config_local_path = mlflow.artifacts.download_artifacts(
+    #     artifact_uri=config_artifact_uri, 
+    #     dst_path=artifact_download_path
+    # )
     with open(config_local_path, 'r') as file:
         model_config = yaml.safe_load(file)
 
@@ -205,7 +220,7 @@ def get_config():
     """
     Load the configuration from the config.yaml file.
     """
-    config_path = '../../Config/config_dev.yaml'
+    config_path = os.environ['CONFIG_PATH']
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file {config_path} not found.")
     

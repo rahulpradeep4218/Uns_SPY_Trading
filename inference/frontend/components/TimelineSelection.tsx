@@ -272,8 +272,8 @@ export default function TimelineSelection({
     }
     //Gaps
     dataRange.coverage.forEach((cov: Coverage, i: number) => {
-        const xMin = new Date(cov.start).getTime();
-        const xMax = new Date(cov.end).getTime();
+        const xMin = new Date(cov.start ?? '1970-01-01T00:00:00Z').getTime();
+        const xMax = new Date(cov.end ?? new Date().toISOString()).getTime();
         //console.log(`Coverage ${i}:`, xMin, xMax);
         let labelText = "Coverage";
         if (cov.start === null) labelText = "No data before";
@@ -357,7 +357,7 @@ export default function TimelineSelection({
                         hour: "HH:mm",
                         day: 'MMM dd',
                     },
-                    parser: (label) => new Date(label),
+                    parser: (label) => new Date(label as string).getTime(),
                     tooltipFormat: 'MMM dd HH:mm',
                 },
                 min: zoomRange.min,

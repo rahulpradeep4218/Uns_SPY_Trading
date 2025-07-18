@@ -1,8 +1,10 @@
 fastapi
-uvicorn
+uvicorn[standard]
+requests
 pandas
 numpy
 sqlalchemy
 pydantic
 psycopg2-binary
 python-multipart
+ruamel.yaml

@@ -1,5 +1,6 @@
 import mlflow
 from mlflow.models import infer_signature
+from mlflow.tracking import MlflowClient
 import optuna
 import numpy as np
 import pandas as pd
@@ -435,6 +436,7 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
     Returns:
         xgb.Booster: Trained XGBoost model.
     """
+    client = MlflowClient()
     parent_run_id = mlflow_resource_dict.get('parent_run_id', None)
     exp_id = mlflow_resource_dict.get('experiment_id', None)
     model_name = config['training_details']['model_name']
@@ -492,7 +494,23 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
             input_example=input_example,
             registered_model_name=f"{model_name}_{high_low}"
         )
+        model_versions = client.search_model_versions(f"name='{model_name}_{high_low}'")
+        model_versions_sorted = sorted(model_versions, key=lambda x: int(x.version), reverse=True)
+        latest_version = int(model_versions_sorted[0].version) if model_versions_sorted else 1
         
+        client.set_model_version_tag(
+            name=f"{model_name}_{high_low}",
+            version=str(latest_version),
+            key="training_start",
+            value=config['training_details']['train_start_date'] + "00:00:00"
+        )
+        client.set_model_version_tag(
+            name=f"{model_name}_{high_low}",
+            version=str(latest_version),
+            key="training_end",
+            value=config['training_details']['train_end_date'] + "23:59:00"
+        )
+
         mlflow_run_id = run.info.run_id
         exp_id = run.info.experiment_id
         tracking_url = mlflow.get_tracking_uri()

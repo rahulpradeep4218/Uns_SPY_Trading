@@ -116,6 +116,15 @@ if 'available' not in st.session_state:
 
 #UI
 st.title("Configuration Editor")
+st.subheader("Inference Configuration")
+inference_config = config.get('inference', {})
+st.subheader("Schwab API Configuration")
+schwab_config = inference_config.get('schwab', {})
+for key, value in schwab_config.items():
+    new_value = st.text_input(f"schwab_{key}", value=str(value))
+    if new_value != value:
+        inference_config['schwab'][key] = type(value)(new_value)
+st.subheader("Training Configuration")
 selected_indicators_ctl = st.multiselect(
     "Select Indicators",
     options=st.session_state['available'],

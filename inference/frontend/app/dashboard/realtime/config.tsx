@@ -6,6 +6,8 @@ import { SimulationOptionsForm, defaultSimulationOptions } from "@/components/Si
 import { SimulationOptions, TradeSession } from "@/app/types";
 import axios from "axios";
 import { DateTime } from "luxon";
+import { renderTradeMarkers } from '@/components/sciChart/renderTradeMarkers';
+import { set } from "lodash";
 
 export default function RealtimeConfig() {
     const { setSidebarFields,
@@ -25,17 +27,22 @@ export default function RealtimeConfig() {
         setTradeRecords,
         candleDataSeriesRef,
         sciChartSurfaceRef,
-        tradeMarkerMapRef
+        tradeMarkerMapRef,
+        isRealtime,
+        setIsRealtime,
+        selected_session,
+        setSelectedSession,
      } = usePageContext();
 
     const low_model_name = process.env.NEXT_PUBLIC_LOW_MODEL_NAME || 'low_model';
     const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
     const realtime_session_id = 0;
     const handleOptionsSubmit = (options: SimulationOptions) => {
-        setSimulationOptions(options);
+        setSimulationOptions?.(options);
     };
-    const inf_url = process.env.NEXT_PUBLIC_INF_URL;
     
+    const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+    console.log("INF URL:", inf_url);
     const syncRealtimeSession = async (updates: Partial<TradeSession>) => {
         try{
             await axios.put(`${inf_url}/api/trade_sessions/${realtime_session_id}`, updates);
@@ -59,7 +66,6 @@ export default function RealtimeConfig() {
 
 
     useEffect(() => {
-
         const updateCurrentSessionData = (sess_id: number) => {
             const fetchSessionDetails = async () => {
                 try{
@@ -79,6 +85,8 @@ export default function RealtimeConfig() {
 
                     setTradeStats(trade_stats);
                     setTradeRecords(trade_records);
+
+                    setIsRealtime?.(true); // Ensure realtime is set to true for this component
                     
 
                     const inf_url = process.env.NEXT_PUBLIC_INF_URL;
@@ -90,7 +98,7 @@ export default function RealtimeConfig() {
                     const res = await fetch(ohlcDataUrl)
                     const ohlcData = await res.json();
                     const xValues = ohlcData.map((item: any) => {
-                        const dt = DateTime.fromISO(item.time, "yyyy-MM-dd HH:mm:ss", { zone: "America/New_York" });
+                        const dt = DateTime.fromISO(item.time, { zone: "America/New_York" });
                         if (!dt.isValid) {
                             console.error("Invalid date in OHLC data:", item.time);
                             return null; // or handle the error as needed
@@ -102,8 +110,8 @@ export default function RealtimeConfig() {
                     const lowValues = ohlcData.map((item: any) => item.low);
                     const closeValues = ohlcData.map((item: any) => item.close);
                     
-                    await candleDataSeriesRef.current?.clear();
-                    await candleDataSeriesRef.current?.appendRange(
+                    await candleDataSeriesRef?.current?.clear();
+                    await candleDataSeriesRef?.current?.appendRange(
                         xValues,
                         openValues,
                         highValues,
@@ -112,8 +120,8 @@ export default function RealtimeConfig() {
                     );
 
                     //sciChartSurfaceRef.current?.zoomExtents();
-                    renderTradeMarkers(
-                            sciChartSurfaceRef.current,
+                    renderTradeMarkers?.(
+                            sciChartSurfaceRef?.current!,
                             trade_records,
                             tradeMarkerMapRef
                         );

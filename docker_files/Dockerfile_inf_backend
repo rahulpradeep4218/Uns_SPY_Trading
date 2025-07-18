@@ -1,0 +1,46 @@
+# Dockerfile.backend
+FROM python:3.10-slim
+
+# Install system packages required to build TA-Lib and Python packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libtool \
+    autoconf \
+    automake \
+    autotools-dev \
+    pkg-config \
+    wget \
+    git \
+    dpkg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and build TA-Lib from source
+
+COPY lib/ta-lib_0.6.4_arm64.deb /tmp/
+RUN dpkg -i /tmp/ta-lib_0.6.4_arm64.deb
+
+# Verify installation
+RUN echo "Detected architecture:" && dpkg --print-architecture
+
+# Set environment variables so Python TA-Lib wrapper can find the C library
+ENV LD_LIBRARY_PATH=/usr/lib
+ENV TA_INCLUDE_PATH=/usr/include
+ENV TA_LIBRARY_PATH=/usr/lib
+
+RUN pip install TA-Lib    
+
+
+WORKDIR /opt
+ARG DAGSTER_TRADING_FUNCTIONS_PATH
+COPY ./trading_functions /opt/trading_functions
+RUN pip install /opt/trading_functions && pip show trading_functions
+
+WORKDIR /
+
+COPY ./inference/backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY ./inference/backend/ .
+
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

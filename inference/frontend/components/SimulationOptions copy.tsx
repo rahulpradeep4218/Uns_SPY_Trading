@@ -42,19 +42,20 @@ export const defaultSimulationOptions: SimulationOptions = {
     speed: 2, // Fast speed
 };
 
-export const SimulationOptionsForm= () => {
+export const SimulationOptionsForm: React.FC<SimulationOptionsFormProps> = ({
+    onSubmit,
+    initialValues = {}
+}) => {
+    const [formValues, setFormValues] = React.useState<SimulationOptions>({
+        ...defaultSimulationOptions,
+        ...initialValues
+    });
 
     const { simulationOptions, setSimulationOptions } = usePageContext();
 
-    const [formValues, setFormValues] = React.useState<SimulationOptions>({
-        ...defaultSimulationOptions,
-        ...simulationOptions
-    });
-
-
     useEffect(() => {
-        setSimulationOptions?.(formValues)
-    }, [formValues, setSimulationOptions]);
+        setSimulationOptions?.(initialValues)
+    }, [initialValues, setSimulationOptions]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;
@@ -64,6 +65,7 @@ export const SimulationOptionsForm= () => {
             [name]: newValue
         };
         setFormValues(updatedValues);
+        onSubmit(updatedValues);
     };
 
     const handleSelectChange = (e: SelectChangeEvent) => {
@@ -73,6 +75,7 @@ export const SimulationOptionsForm= () => {
             [name]: value
         };
         setFormValues(updatedValues);
+        onSubmit(updatedValues);
     };
 
     const handleSliderChange = (name: keyof SimulationOptions) =>
@@ -82,6 +85,7 @@ export const SimulationOptionsForm= () => {
             [name]: Array.isArray(value) ? value[0] : value
         };
         setFormValues(updatedValues);
+        onSubmit(updatedValues);
     };
 
     return (

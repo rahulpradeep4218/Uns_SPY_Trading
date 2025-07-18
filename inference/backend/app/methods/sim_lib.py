@@ -1,4 +1,5 @@
 from ast import In
+from tabnanny import check
 from sqlalchemy.exc import IntegrityError
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, Any
@@ -13,6 +14,8 @@ from trading_functions.inference.inf_functions import (
 )
 
 import pandas as pd
+import logging
+logger = logging.getLogger(__name__)
 
 class SimulationManager:
     def __init__(self):
@@ -36,17 +39,15 @@ class SimulationManager:
         else:
             print(f"No active connection for session {session_id}")
 
-
-
-async def run_simulation_one_candle(
-        db: Session, 
-        session: TradeSession, 
-        training_config, 
-        current_candle: PriceData, 
-        SimulationOptions: SimulationOptions,
-        model_high: Any,
-        model_low: Any,
-        scalers: Dict[str, Any]
+async def get_prediction_for_candle(
+    db: Session,
+    session: TradeSession,
+    current_candle: PriceData,
+    training_config,
+    SimulationOptions: SimulationOptions,
+    model_high: Any,
+    model_low: Any,
+    scalers: Dict[str, Any]
 ):
     max_period = get_maximum_period(training_config)
     
@@ -107,92 +108,33 @@ async def run_simulation_one_candle(
 
     signal = 1 if buy_signal else -1 if sell_signal else 0
 
-
-    ############# Update existing trade record #####################
-    open_trades = db.query(TradeRecord).filter(
-        TradeRecord.session_id == session.id,
-        TradeRecord.status == "OPEN"
-    ).all()
-
-    for trade in open_trades:
-        if trade.signal == 1:
-            
-            if SimulationOptions.tp_type == "fixed" and SimulationOptions.tp_value is not None:
-                calc_take_profit = trade.entry_price + SimulationOptions.tp_value
-            else:
-                calc_take_profit = trade.buy_take_profit
-
-            if SimulationOptions.sl_type == "fixed" and SimulationOptions.sl_value is not None:
-                calc_stop_loss = trade.entry_price - SimulationOptions.sl_value
-            elif SimulationOptions.sl_type == "percent" and SimulationOptions.sl_value is not None:
-                calc_stop_loss = trade.entry_price - (( calc_take_profit - trade.entry_price) * SimulationOptions.sl_value)
-            else:
-                calc_stop_loss = trade.buy_stop_loss
-
-            if current_candle.low <= calc_stop_loss:
-                trade.profit = calc_stop_loss - trade.entry_price
-                trade.status = "CLOSED"
-                trade.exit_price = calc_stop_loss
-                trade.exit_reason = "STOP_LOSS"
-            elif current_candle.high >= calc_take_profit:
-                trade.profit = calc_take_profit - trade.entry_price
-                trade.status = "CLOSED"
-                trade.exit_price = calc_take_profit
-                trade.exit_reason = "TAKE_PROFIT"
-            elif SimulationOptions.close_using_signal and signal == -1:
-                trade.profit = current_close - trade.entry_price
-                trade.status = "CLOSED"
-                trade.exit_price = current_close
-                trade.exit_reason = "OPPOSITE_SIGNAL"
-            elif trade.trade_time + timedelta(minutes=SimulationOptions.max_hold_time) < current_candle.time:
-                trade.profit = current_close - trade.entry_price
-                trade.status = "CLOSED"
-                trade.exit_price = current_close
-                trade.exit_reason = "MAX_HOLD_TIME"
-
-            else:
-                trade.profit = current_close - trade.entry_price
-
-        elif trade.signal == -1:
-
-            if SimulationOptions.tp_type == "fixed" and SimulationOptions.tp_value is not None:
-                calc_take_profit = trade.entry_price - SimulationOptions.tp_value
-            else:
-                calc_take_profit = trade.sell_take_profit
-            if SimulationOptions.sl_type == "fixed" and SimulationOptions.sl_value is not None:
-                calc_stop_loss = trade.entry_price + SimulationOptions.sl_value
-            elif SimulationOptions.sl_type == "percent" and SimulationOptions.sl_value is not None:
-                calc_stop_loss = trade.entry_price + ((trade.entry_price - calc_take_profit) * SimulationOptions.sl_value)
-            else:
-                calc_stop_loss = trade.sell_stop_loss
-
-            if current_candle.high >= calc_stop_loss:
-                trade.profit = trade.entry_price - calc_stop_loss
-                trade.status = "CLOSED"
-                trade.exit_price = calc_stop_loss
-                trade.exit_reason = "STOP_LOSS"
-            elif current_candle.low <= calc_take_profit:
-                trade.profit = trade.entry_price - calc_take_profit
-                trade.status = "CLOSED"
-                trade.exit_price = calc_take_profit
-                trade.exit_reason = "TAKE_PROFIT"
-            elif SimulationOptions.close_using_signal and signal == 1:
-                trade.profit = trade.entry_price - current_close
-                trade.status = "CLOSED"
-                trade.exit_price = current_close
-                trade.exit_reason = "OPPOSITE_SIGNAL"
-            elif trade.trade_time + timedelta(minutes=SimulationOptions.max_hold_time) < current_candle.time:
-                trade.profit = trade.entry_price - current_close
-                trade.status = "CLOSED"
-                trade.exit_price = current_close
-                trade.exit_reason = "MAX_HOLD_TIME"
-            else:
-                trade.profit = trade.entry_price - current_close
-    db.commit()  # Commit the changes to the database
-    #db.refresh(TradeRecord)  # Refresh the session to get the latest data
+    return {
+        "status": "OK",
+        "buy_take": buy_take,
+        "sell_take": sell_take,
+        "buy_stop": buy_stop,
+        "sell_stop": sell_stop,
+        "signal": signal,
+        "current_close": current_close,
+    }
 
 
-    ############ Crreation of trade record #####################
+async def create_trade_for_candle(
+    db: Session,
+    session: TradeSession,
+    current_candle: PriceData,
+    SimulationOptions: SimulationOptions,
+    pred_dict: Dict[str, Any],
+    isRealtime: bool = False,
+    ):
+
+    buy_take = pred_dict["buy_take"]
+    sell_take = pred_dict["sell_take"]
+    buy_stop = pred_dict["buy_stop"]
+    sell_stop = pred_dict["sell_stop"]  
+    signal = pred_dict["signal"]  
+    current_close = current_candle.close
+
     def open_trade_or_not():
         if signal != 0 and not SimulationOptions.allow_multiple_open_trades:
             existing_trade = db.query(TradeRecord).filter(
@@ -205,9 +147,8 @@ async def run_simulation_one_candle(
         elif SimulationOptions.allow_multiple_open_trades and signal != 0:
             return True
         return False
-        
-
-    open_trade = open_trade_or_not()
+    
+    open_trade = True if isRealtime else open_trade_or_not()
     if open_trade and signal != 0:
         status = "OPEN"
         entry_price = current_close
@@ -216,7 +157,7 @@ async def run_simulation_one_candle(
         entry_price = None
     if status != "SIGNAL":
         # Calculate calc_stop_loss
-        if SimulationOptions.sl_type == "fixed" and SimulationOptions.sl_value is not None:
+        if SimulationOptions.sl_type == "abs" and SimulationOptions.sl_value is not None:
             calc_stop_loss = entry_price - SimulationOptions.sl_value if signal == 1 else entry_price + SimulationOptions.sl_value
         elif SimulationOptions.sl_type == "percent" and SimulationOptions.sl_value is not None:
             calc_stop_loss = entry_price - ((buy_take - entry_price) * SimulationOptions.sl_value) if signal == 1 else entry_price + ((entry_price - sell_take) * SimulationOptions.sl_value)
@@ -224,9 +165,11 @@ async def run_simulation_one_candle(
             calc_stop_loss = sell_stop if signal == -1 else buy_stop
 
         # Calculate calc_take_profit
-        if SimulationOptions.tp_type == "fixed" and SimulationOptions.tp_value is not None:
+        if SimulationOptions.tp_type == "abs" and SimulationOptions.tp_value is not None:
+            logger.info(f"Using fixed TP value : {SimulationOptions.tp_value}, signal: {signal}")
             calc_take_profit = entry_price + SimulationOptions.tp_value if signal == 1 else entry_price - SimulationOptions.tp_value
         else:
+            logger.info(f"Using dynamic TP values, buy_take: {buy_take}, sell_take: {sell_take}, signal: {signal}")
             calc_take_profit = buy_take if signal == 1 else sell_take
     else:
         calc_stop_loss = None
@@ -261,11 +204,219 @@ async def run_simulation_one_candle(
         db.commit()
         print(f"Updated existing record for session {session.id} and symbol {session.symbol} at time {current_candle.time}")
 
+    return new_trade_record
+
+async def check_trade_exit(
+    trade: TradeRecord,
+    current_candle: PriceData,
+    SimulationOptions: SimulationOptions,
+    current_signal: int = 0
+):
+    current_close = current_candle.close
+    calc_stop_loss = trade.calc_stop_loss
+    calc_take_profit = trade.calc_take_profit
+    if trade.signal == 1:
+        
+        # if SimulationOptions.tp_type == "fixed" and SimulationOptions.tp_value is not None:
+        #     calc_take_profit = trade.entry_price + SimulationOptions.tp_value
+        # else:
+        #     calc_take_profit = trade.buy_take_profit
+
+        # if SimulationOptions.sl_type == "fixed" and SimulationOptions.sl_value is not None:
+        #     calc_stop_loss = trade.entry_price - SimulationOptions.sl_value
+        # elif SimulationOptions.sl_type == "percent" and SimulationOptions.sl_value is not None:
+        #     calc_stop_loss = trade.entry_price - (( calc_take_profit - trade.entry_price) * SimulationOptions.sl_value)
+        # else:
+        #     calc_stop_loss = trade.buy_stop_loss
+        
+        if current_candle.low <= calc_stop_loss:
+            trade.profit = calc_stop_loss - trade.entry_price
+            trade.status = "CLOSED"
+            trade.exit_price = calc_stop_loss
+            trade.exit_reason = "STOP_LOSS"
+        elif current_candle.high >= calc_take_profit:
+            trade.profit = calc_take_profit - trade.entry_price
+            trade.status = "CLOSED"
+            trade.exit_price = calc_take_profit
+            trade.exit_reason = "TAKE_PROFIT"
+        elif SimulationOptions.close_using_signal and current_signal == -1:
+            trade.profit = current_close - trade.entry_price
+            trade.status = "CLOSED"
+            trade.exit_price = current_close
+            trade.exit_reason = "OPPOSITE_SIGNAL"
+        elif trade.trade_time + timedelta(minutes=SimulationOptions.max_hold_time) < current_candle.time:
+            trade.profit = current_close - trade.entry_price
+            trade.status = "CLOSED"
+            trade.exit_price = current_close
+            trade.exit_reason = "MAX_HOLD_TIME"
+        # Check if End of day reached
+        elif current_candle.time.hour >= 15 and current_candle.time.minute >= 40 and SimulationOptions.close_at_eod:
+            trade.profit = current_close - trade.entry_price
+            trade.status = "CLOSED"
+            trade.exit_price = current_close
+            trade.exit_reason = "END_OF_DAY"
+        else:
+            trade.profit = current_close - trade.entry_price
+
+    elif trade.signal == -1:
+
+        if current_candle.high >= calc_stop_loss:
+            trade.profit = trade.entry_price - calc_stop_loss
+            trade.status = "CLOSED"
+            trade.exit_price = calc_stop_loss
+            trade.exit_reason = "STOP_LOSS"
+        elif current_candle.low <= calc_take_profit:
+            trade.profit = trade.entry_price - calc_take_profit
+            trade.status = "CLOSED"
+            trade.exit_price = calc_take_profit
+            trade.exit_reason = "TAKE_PROFIT"
+        elif SimulationOptions.close_using_signal and current_signal == 1:
+            trade.profit = trade.entry_price - current_close
+            trade.status = "CLOSED"
+            trade.exit_price = current_close
+            trade.exit_reason = "OPPOSITE_SIGNAL"
+        elif trade.trade_time + timedelta(minutes=SimulationOptions.max_hold_time) < current_candle.time:
+            trade.profit = trade.entry_price - current_close
+            trade.status = "CLOSED"
+            trade.exit_price = current_close
+            trade.exit_reason = "MAX_HOLD_TIME"
+        elif current_candle.time.hour >= 15 and current_candle.time.minute >= 40 and SimulationOptions.close_at_eod:
+            trade.profit = current_close - trade.entry_price
+            trade.status = "CLOSED"
+            trade.exit_price = current_close
+            trade.exit_reason = "END_OF_DAY"
+        else:
+            trade.profit = trade.entry_price - current_close
+    return trade.status
+    
+
+async def run_simulation_one_candle(
+        db: Session, 
+        session: TradeSession, 
+        training_config, 
+        current_candle: PriceData, 
+        SimulationOptions: SimulationOptions,
+        model_high: Any,
+        model_low: Any,
+        scalers: Dict[str, Any]
+):
+    pred_dict = await get_prediction_for_candle(
+        db=db,
+        session=session,
+        current_candle=current_candle,
+        training_config=training_config,
+        SimulationOptions=SimulationOptions,
+        model_high=model_high,
+        model_low=model_low,
+        scalers=scalers
+    )
+    if pred_dict["status"] != "OK":
+        pred_dict['buy_take'] = 0.0
+        pred_dict['sell_take'] = 0.0
+        pred_dict['buy_stop'] = 0.0
+        pred_dict['sell_stop'] = 0.0
+        pred_dict['signal'] = 0
+        pred_dict['current_close'] = current_candle.close
+        new_trade_record = await create_trade_for_candle(
+            db=db,
+            session=session,
+            current_candle=current_candle,
+            SimulationOptions=SimulationOptions,
+            pred_dict=pred_dict,
+            isRealtime=False
+        )
+        return {
+            "status": pred_dict["status"],
+            "message": pred_dict["message"]
+        }
+    buy_take = pred_dict["buy_take"]
+    sell_take = pred_dict["sell_take"]
+    buy_stop = pred_dict["buy_stop"]
+    sell_stop = pred_dict["sell_stop"]
+    signal = pred_dict["signal"]
+    current_close = current_candle.close
+
+    ############# Update existing trade record #####################
+    open_trades = db.query(TradeRecord).filter(
+        TradeRecord.session_id == session.id,
+        TradeRecord.status == "OPEN"
+    ).all()
+
+    for trade in open_trades:
+        await check_trade_exit(
+            trade=trade,
+            current_candle=current_candle,
+            SimulationOptions=SimulationOptions,
+            current_signal=signal
+        )
+    db.commit()  # Commit the changes to the database
+    #db.refresh(TradeRecord)  # Refresh the session to get the latest data
+
+    new_trade_record = await create_trade_for_candle(
+        db=db,
+        session=session,
+        current_candle=current_candle,
+        SimulationOptions=SimulationOptions,
+        pred_dict=pred_dict,
+        isRealtime=False
+    )
 
     return {
         "status": "OK",
         "message": "Trade record updated or created successfully.",
     }
     
+
+async def run_realtime_one_candle(
+        db: Session, 
+        session: TradeSession, 
+        training_config, 
+        current_candle: PriceData, 
+        SimulationOptions: SimulationOptions,
+        model_high: Any,
+        model_low: Any,
+        scalers: Dict[str, Any]
+):
+    pred_dict = await get_prediction_for_candle(
+        db=db,
+        session=session,
+        current_candle=current_candle,
+        training_config=training_config,
+        SimulationOptions=SimulationOptions,
+        model_high=model_high,
+        model_low=model_low,
+        scalers=scalers
+    )
+
+    if pred_dict["status"] != "OK":
+        return {
+            "status": pred_dict["status"],
+            "message": pred_dict["message"]
+        }
+    
+    new_trade_record = await create_trade_for_candle(
+        db=db,
+        session=session,
+        current_candle=current_candle,
+        SimulationOptions=SimulationOptions,
+        pred_dict=pred_dict,
+        isRealtime=True
+    )
+    if pred_dict["signal"] != 0:
+        ahead_candles = db.query(PriceData).filter(
+            PriceData.symbol == session.symbol,
+            PriceData.time > current_candle.time
+        ).order_by(PriceData.time.asc()).all()
+        for ahead_candle in ahead_candles:
+            trade_status = await check_trade_exit(
+                trade=new_trade_record,
+                current_candle=ahead_candle,
+                SimulationOptions=SimulationOptions
+            )
+            if trade_status == "CLOSED":
+                break   
+        db.commit()
+        
+
 
 

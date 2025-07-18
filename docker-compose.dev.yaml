@@ -91,6 +91,54 @@ services:
       init-postgresdb:
         condition: service_completed_successfully
 
+  inf_backend:
+    build:
+      context: .
+      dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_inf_backend
+      args:
+        DAGSTER_TRADING_FUNCTIONS_PATH: ${DAGSTER_TRADING_FUNCTIONS_PATH}
+    container_name: inf_backend
+    image: inf_backend_image
+    ports:
+      - "${INFERENCE_BACKEND_PORT}:${INFERENCE_BACKEND_PORT}"  # Expose inference backend port
+    expose:
+      - "${INFERENCE_BACKEND_PORT}"
+    environment:
+      CONFIG_PATH: ${CONFIG_CONTAINER_PATH}
+      EXCEL_OHLC_DATA_PATH: ${DATA_CONTAINER_PATH}/SPY_AllData.xlsx
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      INF_POSTGRES_DB: ${INF_POSTGRES_DB}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+    networks:
+      - app_network
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts  # Mount shared MLflow artifacts volume
+      - data_volume:${DATA_CONTAINER_PATH}  # Mount shared data volume
+      - config_volume:/app/config  # Mount shared config.yaml
+      
+
+  inf_frontend:
+    build:
+      context: .
+      dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_inf_frontend
+    container_name: inf_frontend
+    image: inf_frontend_image
+    ports:
+      - "${INFERENCE_FRONTEND_PORT}:${INFERENCE_FRONTEND_PORT}"  # Expose inference frontend port
+    expose:
+      - "${INFERENCE_FRONTEND_PORT}"
+    networks:
+      - app_network
+    volumes:
+      - config_volume:/app/config  # Mount shared config.yaml
+    environment:
+      NEXT_PUBLIC_INF_URL: http://localhost:${INFERENCE_FRONTEND_PORT}
+      NEXT_PUBLIC_LOW_MODEL_NAME: xgboost_power_low
+      NEXT_PUBLIC_HIGH_MODEL_NAME: xgboost_power_high
+      PORT: ${INFERENCE_FRONTEND_PORT}
+
   dagster_code:
     build:
       context: .
@@ -243,6 +291,13 @@ volumes:
     driver_opts:
       type: none
       device: ${WORKING_DIRECTORY}/mlflow_artifacts  # Your local folder for MLflow artifacts
+      o: bind
+
+  mlflow_local_artifacts:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${WORKING_DIRECTORY}/local_artifacts  # Your local folder for MLflow local artifacts
       o: bind
 
   dagster_local_artifacts:

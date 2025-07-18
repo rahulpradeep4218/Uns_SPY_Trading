@@ -23,7 +23,7 @@ export class CreateHorizontalLineModifier extends ChartModifierBase2D {
                 isEditable: true,
                 showLabel: true,
                 labelValue: yValue.toFixed(2),
-                axisId: yAxis.id,
+                yAxisId: yAxis.id,
                 onClick: "deleteOnClick",
             });
 

@@ -80,7 +80,7 @@ export function renderTradeMarkers(
         let tpLabel: AxisMarkerAnnotation | undefined;
         
         marker.hovered.subscribe((args) => {
-            if (args.isHovered && !slBox && !tpBox) {
+            if (args?.isHovered && !slBox && !tpBox) {
                 const price = trade.entry_price;
                 const chartStart = SciChartSurface.xAxes.get(0).visibleRange.min;
                 const chartEnd = SciChartSurface.xAxes.get(0).visibleRange.max;
@@ -146,7 +146,7 @@ export function renderTradeMarkers(
                 }
 
 
-            } else if (!args.isHovered) {
+            } else if (!args?.isHovered) {
                 if (slBox) SciChartSurface.annotations.remove(slBox);
                 if (tpBox) SciChartSurface.annotations.remove(tpBox);
                 if (slLabel) SciChartSurface.annotations.remove(slLabel);

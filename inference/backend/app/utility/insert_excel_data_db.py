@@ -2,7 +2,6 @@ from json import load
 import random
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sympy import im
 from app.db.session import SessionLocal
 from app.db.models import PriceData
 import random

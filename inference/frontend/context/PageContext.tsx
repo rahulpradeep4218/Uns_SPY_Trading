@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useRef } from 'react';
+import { createContext, useContext, useState, ReactNode, useRef, Dispatch, SetStateAction } from 'react';
 import { TradeStats , TradeRecord, SimulationOptions, OHLCDataPoint } from '@/app/types';
 import { initializeCandleStickChart } from '@/components/sciChart/initializeCandleStickChart';
 
@@ -15,10 +15,10 @@ type PageContextType = {
     setModelHighAlias: (value: string) => void;
     model_low_alias: string;
     setModelLowAlias: (value: string) => void;
-    model_high_version: number;
-    setModelHighVersion: (value: number) => void;
-    model_low_version: number;
-    setModelLowVersion: (value: number) => void;
+    model_high_version: number | string;
+    setModelHighVersion: (value: number | string) => void;
+    model_low_version: number | string;
+    setModelLowVersion: (value: number | string) => void;
     selected_session: number | null;
     training_start: string | null;
     setTrainingStart: (start: string | null) => void;
@@ -29,9 +29,13 @@ type PageContextType = {
         start: string | null;
         end: string | null;
     };
-    setTimeRange: (range: { start: string | null; end: string | null }) => void;
+    setTimeRange: Dispatch<SetStateAction<{ 
+        start: string | null; 
+        end: string | null; 
+    }>>;
+    
     showTimePickerFor: 'start' | 'end' | null;
-    setShowTimePickerFor: (type: 'start' | 'end' | null) => void;
+    setShowTimePickerFor: Dispatch<SetStateAction<'start' | 'end' | null>>;
 
     tradeStats: TradeStats;
     setTradeStats: (stats: TradeStats) => void;
@@ -45,14 +49,20 @@ type PageContextType = {
     simulationOptions?: SimulationOptions;
     setSimulationOptions?: (options: SimulationOptions) => void;
 
-    sciChartSurfaceRef?: React.RefObject<SciChartSurface>;
-    chartControlsRef: React.RefObject<TResolvedReturnType<typeof initializeCandleStickChart>["controls"]>;
+    sciChartSurfaceRef?: React.RefObject<SciChartSurface | null>;
+    chartControlsRef: React.RefObject<TResolvedReturnType<typeof initializeCandleStickChart>["controls"] | null>;
     tradeMarkerMapRef: React.RefObject<Map<number, CustomAnnotation>>;
     candleDataSeriesRef?: React.RefObject<OhlcDataSeries | null>;
 
 
     simulationRun: boolean;
     setSimulationRun: (run: boolean) => void;
+
+    schwabConnStatus: boolean;
+    setSchwabConnStatus: (status: boolean) => void;
+
+    isRealtime?: boolean;
+    setIsRealtime?: (isRealtime: boolean) => void;
 
 };
 
@@ -62,8 +72,8 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
     const [sidebar_fields, setSidebarFields] = useState<ReactNode>(null);
     const [model_high_alias, setModelHighAlias] = useState<string>('');
     const [model_low_alias, setModelLowAlias] = useState<string>('');
-    const [model_high_version, setModelHighVersion] = useState<string>('');
-    const [model_low_version, setModelLowVersion] = useState<string>('');
+    const [model_high_version, setModelHighVersion] = useState<number | string>('');
+    const [model_low_version, setModelLowVersion] = useState<number | string>('');
     const [training_start, setTrainingStart] = useState<string | null>(null);
     const [training_end, setTrainingEnd] = useState<string | null>(null);
     const [selected_session, setSelectedSession] = useState<number | null>(null);
@@ -95,6 +105,10 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
 
 
     const [simulationRun, setSimulationRun] = useState<boolean>(false);
+
+    const [schwabConnStatus, setSchwabConnStatus] = useState<boolean>(false);
+
+    const [isRealtime, setIsRealtime] = useState<boolean>(false);
 
     return (
         <PageContext.Provider 
@@ -132,7 +146,11 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
             tradeMarkerMapRef,
             simulationRun,
             setSimulationRun,
-            candleDataSeriesRef
+            candleDataSeriesRef,
+            schwabConnStatus,
+            setSchwabConnStatus,
+            isRealtime,
+            setIsRealtime
         }}
         >
             {children}

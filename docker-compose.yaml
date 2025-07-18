@@ -79,6 +79,27 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  init-postgresdb:
+    image: postgres:11
+    container_name: init_postgresdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "bash /init_dbs.sh"
+    volumes:
+      - ./dbscripts/init_dbs.sh:/init_dbs.sh
+      - ./dbscripts/init_sql.sql:/init_sql.sql
+
   mlflow:
     build:
       context: .
@@ -206,6 +227,13 @@ services:
         condition: service_healthy
       dagster_code:
         condition: service_started
+
+  inf_backend:
+    build:
+      context: .
+      dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_inf_backend
+      args:
+        CONFIG_DIRECTORY: ${CONFIG_DIRECTORY}
 
 volumes:
 

@@ -1,0 +1,16 @@
+# Dockerfile.frontend
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY ./inference/frontend/package*.json ./
+
+# ✅ This will now use package-lock.json for exact versions
+RUN npm ci
+
+COPY ./inference/frontend/ .
+RUN npm run build
+
+EXPOSE 6000
+
+CMD ["npm", "start"]

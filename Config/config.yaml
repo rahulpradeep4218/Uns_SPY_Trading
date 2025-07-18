@@ -1,3 +1,11 @@
+inference:
+  schwab:
+    auth_url: 'https://api.schwabapi.com/v1/oauth/token'
+    client_id: 'tOjR9AoDxLqEtPR2h8v76KiWAFApOgA3'
+    client_secret: 'EHnICMi3OZS97wAd'
+    redirect_uri: 'https://rahulpradeep.com/trading/charles/callback'
+    refresh_token: 'your_refresh_token_here'
+    access_token: 'your_access_token_here'
 training_details:
   all_data_path: '/app/data/SPY_AllData.xlsx'
   sheet_names: '1minData1-6-2022,1minData1-12-2023'

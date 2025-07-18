@@ -103,7 +103,7 @@ export class VerticalYRulerModifier extends CustomChartModifier2D {
     public ruler: BoxAnnotation | undefined;
 
     private creating: boolean = false;
-    private remove: () => void;
+    private remove!: () => void;
 
     public override modifierMouseDown(args: ModifierMouseArgs): void {
         if (args.button === EExecuteOn.MouseLeftButton && !this.ruler) {

@@ -59,7 +59,7 @@ export default function UserAnnotatedStockChart() {
     const handleToggleButtonChanged = (event: any, state: "pan" | "line" | "marker" | "horline") => {
         if (state === null) return;
         setChartMode(state);
-        chartControlsRef.current.setChartMode(state);
+        chartControlsRef.current!.setChartMode(state);
     };
 
     const handleNameChanged = (event: any) => {
@@ -71,7 +71,7 @@ export default function UserAnnotatedStockChart() {
     };
 
     const saveChart = (event: any) => {
-        savedCharts[name] = chartControlsRef.current.getDefinition();
+        savedCharts[name] = chartControlsRef.current!.getDefinition();
         if (localStorageApi.storageAvailable()) {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(savedCharts));
         }
@@ -81,11 +81,11 @@ export default function UserAnnotatedStockChart() {
     const loadChart = (event: any) => {
         const definition = savedCharts[selectedChart];
         setName(selectedChart);
-        chartControlsRef.current.resetChart();
-        chartControlsRef.current.applyDefinition(definition);
+        chartControlsRef.current!.resetChart();
+        chartControlsRef.current!.applyDefinition(definition);
     };
     const resetChart = (event: any) => {
-        chartControlsRef.current.resetChart();
+        chartControlsRef.current!.resetChart();
     };
 
     const { classes } = useStyles();
@@ -194,10 +194,10 @@ export default function UserAnnotatedStockChart() {
                     </div>
                     <SciChartReact
                         className={classes.chartArea}
-                        initChart={(divElementId) => initializeCandleStickChart(divElementId, candleDataSeriesRef)}
+                        initChart={(divElementId) => initializeCandleStickChart(divElementId, candleDataSeriesRef!)}
                         onInit={({ sciChartSurface, controls }: TResolvedReturnType<typeof initializeCandleStickChart>) => {
-                            sciChartSurfaceRef.current = sciChartSurface;
-                            chartControlsRef.current = controls;
+                            sciChartSurfaceRef!.current = sciChartSurface;
+                            chartControlsRef!.current = controls;
                         }}
                     />
                 </div>

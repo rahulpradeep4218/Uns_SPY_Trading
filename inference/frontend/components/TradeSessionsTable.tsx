@@ -1,24 +1,41 @@
 'use client'
 import { DateTime } from "luxon";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DataGrid, GridColDef, GridActionsCellItem, GridRowSelectionModel } from '@mui/x-data-grid';
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
 import { Delete, Edit } from '@mui/icons-material';
 import axios from 'axios';
+
 import { usePageContext } from '@/context/PageContext';
-import { format } from 'path';
-import { last, set, update } from 'lodash';
-import { time } from 'console';
 
 import { renderTradeMarkers } from '@/components/sciChart/renderTradeMarkers';
 
 import { TradeSession } from '@/app/types';
 
+import { GridPaginationModel } from '@mui/x-data-grid';
+
 export default function TradeSessionsTable() {
+
+    const isMountedRef = useRef(false);
+
+    const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({
+        pageSize: 10,
+        page: 0
+    });
     const [sessions, setSessions] = useState<TradeSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [open, setOpen] = useState(false);
     const [currentSession, setCurrentSession] = useState<TradeSession | null>(null);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        setLoading(true);
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+
     const { 
         timeRange, setTimeRange, 
         model_high_alias, setModelHighAlias, 
@@ -28,8 +45,8 @@ export default function TradeSessionsTable() {
         selected_session, setSelectedSession,
         tradeStats, setTradeStats,
         tradeRecords, setTradeRecords,
-        trainingStart, setTrainingStart,
-        trainingEnd, setTrainingEnd,
+        setTrainingStart,
+        setTrainingEnd,
         sciChartSurfaceRef,
         tradeMarkerMapRef,
         candleDataSeriesRef
@@ -38,18 +55,24 @@ export default function TradeSessionsTable() {
 
     const handleRowSelection = (model: {
         type: 'include' | 'exclude';
-        ids: Set<number>;
+        ids: Set<number | string>;
     }) => {
-        const { ids } = model;
+        const { ids, type } = model;
         if (ids.size === 0) {
             setSelectedSession(null);
             return;
         }
-        const idsArray = Array.from(ids);
-        const lastSelectedId = idsArray[idsArray.length - 1];
-        //console.log("Last selected id :", lastSelectedId);
-        setSelectedSession(lastSelectedId);
-        updateCurrentSessionData(lastSelectedId);
+
+        // We care only when type is include
+        if (type == 'include') {
+            const arrayIds = Array.from(ids)
+                .filter((id): id is number => typeof id === 'number');
+
+            const lastSelectedId = arrayIds[arrayIds.length - 1];
+            //console.log("Last selected id :", lastSelectedId);
+            setSelectedSession(lastSelectedId);
+            updateCurrentSessionData(lastSelectedId);
+        }
     };
 
 
@@ -105,7 +128,7 @@ export default function TradeSessionsTable() {
                 const res = await fetch(ohlcDataUrl)
                 const ohlcData = await res.json();
                 const xValues = ohlcData.map((item: any) => {
-                    const dt = DateTime.fromISO(item.time, "yyyy-MM-dd HH:mm:ss", { zone: "America/New_York" });
+                    const dt = DateTime.fromISO(item.time, { zone: "America/New_York" });
                     if (!dt.isValid) {
                         console.error("Invalid date in OHLC data:", item.time);
                         return null; // or handle the error as needed
@@ -117,8 +140,8 @@ export default function TradeSessionsTable() {
                 const lowValues = ohlcData.map((item: any) => item.low);
                 const closeValues = ohlcData.map((item: any) => item.close);
                 
-                await candleDataSeriesRef.current?.clear();
-                await candleDataSeriesRef.current?.appendRange(
+                await candleDataSeriesRef?.current?.clear();
+                await candleDataSeriesRef?.current?.appendRange(
                     xValues,
                     openValues,
                     highValues,
@@ -128,7 +151,7 @@ export default function TradeSessionsTable() {
 
                 //sciChartSurfaceRef.current?.zoomExtents();
                 renderTradeMarkers(
-                        sciChartSurfaceRef.current,
+                        sciChartSurfaceRef?.current!,
                         trade_records,
                         tradeMarkerMapRef
                     );
@@ -143,7 +166,6 @@ export default function TradeSessionsTable() {
 
     useEffect(() => {
         const fetchData = async () => {
-            setLoading(true);
             const inf_url = process.env.NEXT_PUBLIC_INF_URL;
             console.log("Fetching trade sessions from:", inf_url);
             const response = await axios.get(`${inf_url}/api/trade_sessions?type=Simulated`);
@@ -155,14 +177,14 @@ export default function TradeSessionsTable() {
             //         trade_end: typeof response.data[0].trade_end
             //     }
             // });
-            const sessionsWithDates = response.data.map(session => ({
+            const sessionsWithDates = response.data.map((session: TradeSession) => ({
                 ...session,
                 // Preserve original string dates for debugging
                 original_start: session.trade_start,
                 original_end: session.trade_end,
                 // Convert to Date objects
-                trade_start: new Date(session.trade_start),
-                trade_end: new Date(session.trade_end)
+                trade_start: new Date(session.trade_start ?? ''),
+                trade_end: new Date(session.trade_end ?? '')
             }));
             setSessions(sessionsWithDates);
             console.log("Fetched trade sessions:", sessionsWithDates);
@@ -191,9 +213,9 @@ export default function TradeSessionsTable() {
             currentSession.trade_start = timeRange.start;
             currentSession.trade_end = timeRange.end;
             currentSession.model_high_alias = model_high_alias;
-            currentSession.model_high_version = model_high_version;
+            currentSession.model_high_version = model_high_version ? Number(model_high_version) : undefined;
             currentSession.model_low_alias = model_low_alias;
-            currentSession.model_low_version = model_low_version;
+            currentSession.model_low_version = model_low_version ? Number(model_low_version) : undefined;
             console.log("Time start :", timeRange.start);
 
             const response = currentSession.id
@@ -277,6 +299,10 @@ export default function TradeSessionsTable() {
         },
     ];
 
+    if (loading){
+        return <div>Loading Trading Sessions...</div>;
+    }
+
     return (
         <div style={{ height: 500, width: '100%' }}>
             <Button
@@ -311,13 +337,18 @@ export default function TradeSessionsTable() {
             <DataGrid
                 rows={sessions}
                 columns={columns}
-                pageSize={10}
-                rowsPerPageOptions={[10]}
                 checkboxSelection
-                disableSelectionOnClick
+                disableRowSelectionOnClick
                 onRowSelectionModelChange={handleRowSelection}
                 loading={loading}
                 getRowId={(row) => row.id}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                pageSizeOptions={[10]}
+
+                initialState={{
+                    pagination: { paginationModel },
+                }}
             />
 
             <Dialog open={open} onClose={() => setOpen(false)}>

@@ -1,8 +1,5 @@
-import json
-from math import inf
-from pdb import run
-import stat
-from webbrowser import get
+
+from venv import logger
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -10,6 +7,7 @@ from sqlalchemy import alias
 from sqlalchemy.orm import Session
 import asyncio
 from datetime import datetime
+from dotenv import load_dotenv
 
 from app.api.deps import get_db
 from app.db.schemas import SimulationOptions, TradeStats, TradeRecordResponse
@@ -19,9 +17,16 @@ from trading_functions.inference.inf_functions import (
     download_artifacts,
     get_model_from_mlflow
 )
-from app.methods.sim_lib import run_simulation_one_candle
+import os
+from app.methods.sim_lib import run_simulation_one_candle, run_realtime_one_candle, check_trade_exit
 
+from app.methods.schwab_methods import get_price_history, sync_realtime_price_history
+import time
+import logging
 
+logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 router = APIRouter()
 
@@ -37,6 +42,29 @@ def serialize_candle(candle):
         'volume': candle.volume,
     }
 
+def get_data_for_model_inference(session_record: TradeSession):
+    high_alias = session_record.model_high_alias
+    inf_config_path = os.getenv('CONFIG_PATH', 'NO_PATH')
+    with open(inf_config_path, 'r') as file:
+        inf_config = yaml.safe_load(file)
+    scalers, training_config = download_artifacts(
+        config=inf_config,
+        alias=high_alias,
+    )
+    model_high_version = session_record.model_high_version
+    model_low_version = session_record.model_low_version
+
+    model_high = get_model_from_mlflow(
+        config=inf_config,
+        model_name=inf_config['mlflow']['high_model_name'],
+        model_version=model_high_version
+    )
+    model_low = get_model_from_mlflow(
+        config=inf_config,
+        model_name=inf_config['mlflow']['low_model_name'],
+        model_version=model_low_version
+    )
+    return scalers, training_config, model_high, model_low , inf_config
 
 
 @router.get("/get_session/{session_id}")
@@ -67,8 +95,14 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
             PriceData.time <= last_trade_signal_time
         ).all()
         candle_till_now_count = len(candles_till_now)
+        trade_till_now = db.query(TradeRecord).filter(
+            TradeRecord.session_id == session_id,
+            TradeRecord.trade_time <= last_trade_signal_time,
+            TradeRecord.trade_time >= session.trade_start
+        ).all()
+        trade_till_now_count = len(trade_till_now)
         if all_candles_count > 0:
-            progress = candle_till_now_count / all_candles_count * 100
+            progress = trade_till_now_count / all_candles_count * 100
         else:
             progress = 0.0
 
@@ -108,10 +142,11 @@ async def websocket_simulation(
     try:
         initial_data = await websocket.receive_json()
         sim_options = SimulationOptions(**initial_data['options'])
-        inf_config_path = '../../Config/config_dev.yaml'
-        with open(inf_config_path, 'r') as file:
-            inf_config = yaml.safe_load(file)
+        logger.info(f"Received simulation options: {sim_options.model_dump()}")
+        
+
         speed = min(sim_options.speed, 10.0)  # Cap speed to a maximum of 10x
+        logger.info(f"Speed delay : {1.0 / speed}")
         session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
         if not session_record:
             await websocket.close(code=1008, reason="Session not found")
@@ -120,24 +155,8 @@ async def websocket_simulation(
         if not high_alias:
             await websocket.close(code=1008, reason="Session high model alias not found")
             return
-        scalers, training_config = download_artifacts(
-            config=inf_config,
-            alias=high_alias,
-        )
         
-        model_high_version = session_record.model_high_version
-        model_low_version = session_record.model_low_version
-
-        model_high = get_model_from_mlflow(
-            config=inf_config,
-            model_name=inf_config['mlflow']['high_model_name'],
-            model_version=model_high_version
-        )
-        model_low = get_model_from_mlflow(
-            config=inf_config,
-            model_name=inf_config['mlflow']['low_model_name'],
-            model_version=model_low_version
-        )
+        scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
 
         candles_query = db.query(PriceData).filter(
             PriceData.symbol == session_record.symbol,
@@ -181,8 +200,13 @@ async def websocket_simulation(
                 PriceData.time <= current_candle.time,
                 PriceData.time >= session_record.trade_start
             ).all()
-            candle_till_now_count = len(candles_till_now)
-            progress = candle_till_now_count / len(all_candles) * 100 if all_candles else 0
+            trade_signals_till_now = db.query(TradeRecord).filter(
+                TradeRecord.session_id == session_id,
+                TradeRecord.trade_time <= current_candle.time,
+                TradeRecord.trade_time >= session_record.trade_start
+            ).all()
+            trade_signals_till_now_count = len(trade_signals_till_now)
+            progress = trade_signals_till_now_count / len(all_candles) * 100 if all_candles else 0
             candles_list = [can for can in candles_till_now]
             candle_table = jsonable_encoder(candles_list)
             await websocket.send_json({
@@ -210,6 +234,124 @@ async def websocket_simulation(
 
     except WebSocketDisconnect:
         print(f"Client disconnected from session {session_id}")
+
+
+
+@router.websocket("/ws/realtime")
+async def websocket_realtime(
+    websocket: WebSocket, 
+    db: Session = Depends(get_db)
+):
+    """
+    WebSocket endpoint for real-time simulation updates.
+    """
+    session_id = 0
+    await websocket.accept()
+    try:
+        while True:
+            print("Waiting for initial data from client...")
+            initial_data = await websocket.receive_json()
+            print("Session id : ", session_id)
+            sim_options = SimulationOptions(**initial_data['options'])
+            
+            session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
+            if not session_record:
+                await websocket.close(code=1008, reason="Realtime Session not found")
+                return
+            high_alias = session_record.model_high_alias if session_record.model_high_alias else None
+            if not high_alias:
+                await websocket.close(code=1008, reason="Session high model alias not found")
+                return
+            
+            scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
+            print("Scalers and models loaded successfully. Running sync realtime for once before entering loop")
+            first_record_time = sync_realtime_price_history(
+                session_record.symbol,
+                inf_config['inference']['schwab']
+            ) 
+            sync_frequency = inf_config['inference']['schwab'].get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
+
+            candles_query = db.query(PriceData).filter(
+                PriceData.symbol == session_record.symbol,
+                PriceData.time >= first_record_time
+            ).order_by(PriceData.time.desc())
+            
+            candles = candles_query.all()
+            print(f"Total candles to process: {len(candles)}")
+            last_sync_time = 0
+
+            for current_candle in candles:
+                # Simulate processing time based on speed factor
+                #await asyncio.sleep(1.0 / speed)
+                # Check already trade run for this candle
+                
+                now = time.time()
+                if now - last_sync_time >= sync_frequency:
+                    print(f"Syncing realtime data for session {session_id} at {current_candle.time}")
+                    first_record_time = sync_realtime_price_history(
+                        session_record.symbol,
+                        inf_config['inference']['schwab']
+                    ) 
+                    open_trades = db.query(TradeRecord).filter(
+                        TradeRecord.session_id == session_id,
+                        TradeRecord.status == "OPEN"
+                    ).all()
+                    for trade in open_trades:
+                        await check_trade_exit(trade, current_candle, sim_options)
+                    db.commit()  # Commit the changes to the database
+                    last_sync_time = time.time()
+                else:
+                    trade_candle = db.query(TradeRecord).filter(
+                        TradeRecord.session_id == session_id,
+                        TradeRecord.trade_time == current_candle.time,
+                    ).first()
+                    if trade_candle:
+                        continue
+                    result = await run_realtime_one_candle(
+                        db,
+                        session_record,
+                        training_config,
+                        current_candle,
+                        sim_options,
+                        model_high,
+                        model_low,
+                        scalers
+                    )
+
+                candle_data = db.query(PriceData).filter(
+                    PriceData.symbol == session_record.symbol,
+                    PriceData.time >= first_record_time,
+                ).all()
+                progress = 0
+                candles_list = [can for can in candle_data]
+                candle_table = jsonable_encoder(candles_list)
+                await websocket.send_json({
+                    "type": "candle_data",
+                    "data": candle_table
+                })
+
+                all_trades, trade_stats = get_trade_and_trade_stats(
+                    db,
+                    session_id,
+                    progress
+                )
+
+                await websocket.send_json({
+                    "type": "trade_stats",
+                    "data": trade_stats.model_dump()
+                })
+
+                trade_table = [trade for trade in all_trades]
+                trade_table = jsonable_encoder(trade_table)
+                await websocket.send_json({
+                    "type": "trade_table",
+                    "data": trade_table
+                })
+
+    except WebSocketDisconnect:
+        print(f"Client disconnected from session {session_id}")
+
+
 
 
 def get_trade_and_trade_stats(db: Session, session_id: int, progress: float):

@@ -8,6 +8,8 @@ import { TradeStatsDisplay } from '@/components/Trade_Stats/Trade_Scorecard';
 import { Box, Grid, Typography, Button } from '@mui/material';
 
 import { renderTradeMarkers } from '@/components/sciChart/renderTradeMarkers';
+import { init } from "next/dist/compiled/webpack/webpack";
+import { defaultSimulationOptions } from "@/components/SimulationOptions";
 
 
 
@@ -27,7 +29,9 @@ export default function TradeStatsDashboard() {
         tradeMarkerMapRef,
         simulationRun, // for candle simulation
         setSimulationRun, // for candle simulation
-        candleDataSeriesRef
+        candleDataSeriesRef,
+        isRealtime,
+        setIsRealtime
     } = usePageContext();
 
     const [connectionStatus, setConnectionStatus] = useState('Disconnected');
@@ -35,17 +39,23 @@ export default function TradeStatsDashboard() {
     const [loading, setLoading] = useState(true);
 
     const initializeWebSocket = () => {
-        if (!selected_session) {
+        console.log("Initialize web socket, selected session:", selected_session, "isRealtime:", isRealtime);
+
+        if (selected_session === null || selected_session === undefined) {
             console.error("No selected session set. Cannot initialize WebSocket.");
             return;
         }
-
+        
         setLoading(true);
         setConnectionStatus('Connecting....');
         const rawUrl = process.env.NEXT_PUBLIC_INF_URL;
         const strippedUrl = rawUrl?.replace(/^https?:\/\//, "");
         const wsProtocol = rawUrl?.startsWith('https') ? 'wss' : 'ws';
-        const socket = new WebSocket(`${wsProtocol}://${strippedUrl}/api/process/ws/simulation/${selected_session}`);
+        const socketUrl = isRealtime 
+            ? `${wsProtocol}://${strippedUrl}/api/process/ws/realtime`
+            : `${wsProtocol}://${strippedUrl}/api/process/ws/simulation/${selected_session}`;
+
+        const socket = new WebSocket(socketUrl);
         setWsConnection(socket);
 
         socket.onopen = () => {
@@ -61,8 +71,11 @@ export default function TradeStatsDashboard() {
                     options: simulationOptions
                 }));
             }
+            else{
+                console.error("Simulation options are not set. Cannot start simulation.");
+            }
         };
-
+        
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === 'trade_stats') {
@@ -70,7 +83,7 @@ export default function TradeStatsDashboard() {
             }
             else if (data.type === 'trade_table') {
                 setTradeRecords(data.data);
-                if (sciChartSurfaceRef.current) {
+                if (sciChartSurfaceRef?.current) {
                     //console.log("Rendering trade markers on the chart");
                     renderTradeMarkers(
                         sciChartSurfaceRef.current, 
@@ -82,7 +95,7 @@ export default function TradeStatsDashboard() {
             else if (data.type === "candle_data"){
                 const ohlcData = data.data;
                 const xValues = ohlcData.map((candle: any) => {
-                    const dt = DateTime.fromISO(candle.time, "yyyy-MM-dd HH:mm:ss", { zone: 'America/New_York' });
+                    const dt = DateTime.fromISO(candle.time, { zone: 'America/New_York' });
                     if (!dt.isValid) {
                         console.error("Invalid date format in candle data:", candle.time);
                         return 0; // or handle the error as needed
@@ -94,8 +107,8 @@ export default function TradeStatsDashboard() {
                 const lowValues = ohlcData.map((candle: any) => candle.low);
                 const closeValues = ohlcData.map((candle: any) => candle.close);
 
-                candleDataSeriesRef.current?.clear();
-                candleDataSeriesRef.current?.appendRange(
+                candleDataSeriesRef?.current?.clear();
+                candleDataSeriesRef?.current?.appendRange(
                     xValues,
                     openValues,
                     highValues,
@@ -117,10 +130,11 @@ export default function TradeStatsDashboard() {
             setLoading(false);
             setIsSimulationRunning(false);
         };
-
         return socket;
+        
 
     };
+
 
     const startSimulation = () => {
         if (!simulationOptions) {
@@ -158,6 +172,7 @@ export default function TradeStatsDashboard() {
 
     return (
         <>
+
         <Box sx={{ 
                 display: 'flex', 
                 width: '100%', 
@@ -215,6 +230,7 @@ export default function TradeStatsDashboard() {
                 </Button>
 
         </Box>
+
         <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h5" gutterBottom sx={{ mb:3 }}>
                 Trade Statistics

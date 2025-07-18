@@ -1,10 +1,16 @@
 'use client';
 
 import { usePageContext } from "@/context/PageContext";
-import { useState, useEffect, useRef } from "react";
-import TimelineSelection from "@/components/TimelineSelection";
+import { useState, useEffect, useRef, SetStateAction } from "react";
 import { SimulationOptionsForm, defaultSimulationOptions } from "@/components/SimulationOptions";
 import { SimulationOptions } from "@/app/types";
+
+// Doing lazy dynamic loading for TimelineSelection component to avoid SSR issues
+import dynamic from 'next/dynamic';
+const TimelineSelection = dynamic(() => import('@/components/TimelineSelection'), {
+    ssr: false,
+    loading: () => <div className="flex items-center justify-center h-full">Loading timeline selection...</div>
+});
 
 export default function SimulationConfig() {
     const { 
@@ -22,7 +28,8 @@ export default function SimulationConfig() {
         showTimePickerFor,
         setShowTimePickerFor,
         simulationOptions,
-        setSimulationOptions
+        setSimulationOptions,
+        setIsRealtime,
     } = usePageContext();
     const low_model_name = process.env.NEXT_PUBLIC_LOW_MODEL_NAME || 'low_model';
     const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
@@ -31,7 +38,11 @@ export default function SimulationConfig() {
         console.log("Current picker state : ", showTimePickerFor);
     }, [showTimePickerFor]);
     */
-
+    
+    
+    useEffect(() => {
+        setIsRealtime?.(false); // Ensure realtime is set to false for simulation
+    },[]);
     useEffect(() => {
         if (!showTimePickerFor) return;
 
@@ -60,6 +71,7 @@ export default function SimulationConfig() {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [showTimePickerFor, setShowTimePickerFor]);
+
     const formatTime = (time: string | null) => {
         if (!time) return 'Not selected';
         const date = new Date(time);
@@ -80,7 +92,7 @@ export default function SimulationConfig() {
         end: useRef<HTMLButtonElement>(null)
     }
     const handleOptionsSubmit = (options: SimulationOptions) => {
-        setSimulationOptions(options);
+        setSimulationOptions?.(options);
     };
     useEffect(() => {
 
@@ -146,7 +158,7 @@ export default function SimulationConfig() {
                         </select>
                     </div>
 
-                    {['start', 'end'].map((timeType) => (
+                    {(['start', 'end'] as const).map((timeType) => (
                         <div key={timeType} className="w-full">
                             <label className="block text-xs text-gray-50 mb-1">
                                 {timeType === 'start' ? 'Start Time' : 'End Time'}
@@ -163,7 +175,9 @@ export default function SimulationConfig() {
                                     onClick = {() => {
                                         console.log("Button clicked for:", timeType);
                                         //console.log("Current showTimePickerFor:", showTimePickerFor);
-                                        setShowTimePickerFor(prev => prev === timeType ? null : timeType);
+                                        setShowTimePickerFor((prev) => 
+                                            prev === timeType ? null : timeType
+                                        );
                                     }}
                                     className="bg-blue-500 text-white px-2 py-1 rounded-r text-xs hover:bg-blue-600"
                                 >
@@ -200,7 +214,8 @@ export default function SimulationConfig() {
                         </div>
                     </div>
                 )}
-                <SimulationOptionsForm onSubmit={handleOptionsSubmit} initialValues={defaultSimulationOptions}/>
+               {/* <SimulationOptionsForm onSubmit={handleOptionsSubmit} initialValues={defaultSimulationOptions}/> */}
+               <SimulationOptionsForm />
                 </>
             );
         }
