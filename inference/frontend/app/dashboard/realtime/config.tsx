@@ -37,9 +37,7 @@ export default function RealtimeConfig() {
     const low_model_name = process.env.NEXT_PUBLIC_LOW_MODEL_NAME || 'low_model';
     const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
     const realtime_session_id = 0;
-    const handleOptionsSubmit = (options: SimulationOptions) => {
-        setSimulationOptions?.(options);
-    };
+
     
     const inf_url = process.env.NEXT_PUBLIC_INF_URL;
     console.log("INF URL:", inf_url);
@@ -66,6 +64,7 @@ export default function RealtimeConfig() {
 
 
     useEffect(() => {
+        setIsRealtime?.(true); // Ensure realtime is set to true for this component
         const updateCurrentSessionData = (sess_id: number) => {
             const fetchSessionDetails = async () => {
                 try{
@@ -85,8 +84,6 @@ export default function RealtimeConfig() {
 
                     setTradeStats(trade_stats);
                     setTradeRecords(trade_records);
-
-                    setIsRealtime?.(true); // Ensure realtime is set to true for this component
                     
 
                     const inf_url = process.env.NEXT_PUBLIC_INF_URL;
@@ -200,7 +197,7 @@ export default function RealtimeConfig() {
                     </div>
     
                     
-                    <SimulationOptionsForm onSubmit={handleOptionsSubmit} initialValues={defaultSimulationOptions}/>
+                    <SimulationOptionsForm />
                 </>
             );
         }

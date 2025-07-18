@@ -1,6 +1,6 @@
 
 from venv import logger
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy import alias
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
+import os
 
 from app.api.deps import get_db
 from app.db.schemas import SimulationOptions, TradeStats, TradeRecordResponse
@@ -42,11 +43,21 @@ def serialize_candle(candle):
         'volume': candle.volume,
     }
 
-def get_data_for_model_inference(session_record: TradeSession):
-    high_alias = session_record.model_high_alias
+
+def get_inf_config():
     inf_config_path = os.getenv('CONFIG_PATH', 'NO_PATH')
+    if not inf_config_path or not os.path.exists(inf_config_path):
+        raise FileNotFoundError(f"Configuration file not found at {inf_config_path}")
+    
     with open(inf_config_path, 'r') as file:
         inf_config = yaml.safe_load(file)
+    
+    return inf_config
+
+
+def get_data_for_model_inference(session_record: TradeSession):
+    high_alias = session_record.model_high_alias
+    inf_config = get_inf_config()
     scalers, training_config = download_artifacts(
         config=inf_config,
         alias=high_alias,
@@ -66,6 +77,35 @@ def get_data_for_model_inference(session_record: TradeSession):
     )
     return scalers, training_config, model_high, model_low , inf_config
 
+@router.get("/get_simulation_options")
+async def get_simulation_options(type: str = "simulation"):
+    inf_config = get_inf_config()
+    simulation_options_path = inf_config.get('inference', {}).get('simulation_options_config_path', 'simulation_options.yaml')
+    inf_config_path = os.getenv('CONFIG_PATH', 'NO_PATH')
+    config_dir = os.path.dirname(inf_config_path)
+    simulation_options_path = os.path.join(config_dir, simulation_options_path)
+    with open(simulation_options_path, 'r') as file:
+        simulation_options = yaml.safe_load(file)
+
+    return jsonable_encoder(simulation_options.get(type, {}))
+
+@router.post("/set_simulation_options")
+async def set_simulation_options(options: SimulationOptions, type: str = Query(default="simulation")):
+    inf_config = get_inf_config()
+    simulation_options_path = inf_config.get('inference', {}).get('simulation_options_config_path', 'simulation_options.yaml')
+    inf_config_path = os.getenv('CONFIG_PATH', 'NO_PATH')
+    config_dir = os.path.dirname(inf_config_path)
+    simulation_options_path = os.path.join(config_dir, simulation_options_path)
+    
+    with open(simulation_options_path, 'r') as file:
+        complete_simulation_options = yaml.safe_load(file)
+
+    complete_simulation_options[type] = jsonable_encoder(options)
+
+    with open(simulation_options_path, 'w') as file:
+        yaml.dump(complete_simulation_options, file, default_flow_style=False)
+
+    return {"message": "Simulation options updated successfully."}
 
 @router.get("/get_session/{session_id}")
 async def get_session(session_id: int, db: Session = Depends(get_db)):
@@ -145,7 +185,7 @@ async def websocket_simulation(
         logger.info(f"Received simulation options: {sim_options.model_dump()}")
         
 
-        speed = min(sim_options.speed, 10.0)  # Cap speed to a maximum of 10x
+        speed = min(sim_options.speed, 20.0)  # Cap speed to a maximum of 20x
         logger.info(f"Speed delay : {1.0 / speed}")
         session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
         if not session_record:
@@ -192,7 +232,8 @@ async def websocket_simulation(
                 sim_options, 
                 model_high, 
                 model_low, 
-                scalers
+                scalers,
+                inf_config=inf_config
             )
 
             candles_till_now = db.query(PriceData).filter(
@@ -365,7 +406,8 @@ def get_trade_and_trade_stats(db: Session, session_id: int, progress: float):
     ).all()
     all_trades = db.query(TradeRecord).filter(
         TradeRecord.session_id == session_id,
-        TradeRecord.signal != 0
+        TradeRecord.signal != 0,
+        TradeRecord.status != "SIGNAL"
     ).order_by(TradeRecord.trade_time.desc()).all()
 
     all_trade_signals = db.query(TradeRecord).filter(

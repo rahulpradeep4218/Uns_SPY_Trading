@@ -91,9 +91,7 @@ export default function SimulationConfig() {
         start: useRef<HTMLButtonElement>(null),
         end: useRef<HTMLButtonElement>(null)
     }
-    const handleOptionsSubmit = (options: SimulationOptions) => {
-        setSimulationOptions?.(options);
-    };
+
     useEffect(() => {
 
         const fetchModelAliases = async ()=> {

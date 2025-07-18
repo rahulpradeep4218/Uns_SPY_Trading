@@ -4,7 +4,7 @@ import { usePageContext } from "@/context/PageContext";
 
 import React from "react";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import {
     Box, 
@@ -44,16 +44,61 @@ export const defaultSimulationOptions: SimulationOptions = {
 
 export const SimulationOptionsForm= () => {
 
-    const { simulationOptions, setSimulationOptions } = usePageContext();
+    const { 
+        simulationOptions, 
+        setSimulationOptions,
+        isRealtime
+    } = usePageContext();
+    
+    const update_simulation_options_backend = async (options: SimulationOptions) => {
+        try {
+            const sim_type = isRealtime ? "realtime" : "simulation";
+            console.log("Updating simulation options for type:", sim_type, "with options:", options);
+            const url = process.env.NEXT_PUBLIC_INF_URL;
+            const response = await fetch(`${url}/api/process/set_simulation_options?type=${sim_type}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(options),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to update simulation options');
+            }
+        } catch (error) {
+            console.error('Error updating simulation options:', error);
+        }
+    };
 
-    const [formValues, setFormValues] = React.useState<SimulationOptions>({
-        ...defaultSimulationOptions,
-        ...simulationOptions
-    });
+    // Initialize form values with  options obtained from api call
+    const file_simulation_options = async () => {
+        try {
+            const sim_type = isRealtime ? "realtime" : "simulation";
+            const url = process.env.NEXT_PUBLIC_INF_URL;
+            const response = await fetch(`${url}/api/process/get_simulation_options?type=${sim_type}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch simulation options');
+            }
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching simulation options:', error);
+            return defaultSimulationOptions; // Fallback to default options
+        }
+    };
+
+    const [formValues, setFormValues] = useState<SimulationOptions>(defaultSimulationOptions);
+    useEffect(() => {
+        const fetchDefaultOptions = async () => {
+            const options = await file_simulation_options();
+            setFormValues({...defaultSimulationOptions, ...options, ...simulationOptions});
+        };
+        fetchDefaultOptions();
+    }, [isRealtime]);
 
 
     useEffect(() => {
-        setSimulationOptions?.(formValues)
+        setSimulationOptions?.(formValues!);
     }, [formValues, setSimulationOptions]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,6 +109,7 @@ export const SimulationOptionsForm= () => {
             [name]: newValue
         };
         setFormValues(updatedValues);
+        update_simulation_options_backend(updatedValues);
     };
 
     const handleSelectChange = (e: SelectChangeEvent) => {
@@ -73,6 +119,7 @@ export const SimulationOptionsForm= () => {
             [name]: value
         };
         setFormValues(updatedValues);
+        update_simulation_options_backend(updatedValues);
     };
 
     const handleSliderChange = (name: keyof SimulationOptions) =>
@@ -82,6 +129,7 @@ export const SimulationOptionsForm= () => {
             [name]: Array.isArray(value) ? value[0] : value
         };
         setFormValues(updatedValues);
+        update_simulation_options_backend(updatedValues);
     };
 
     return (
@@ -142,7 +190,7 @@ export const SimulationOptionsForm= () => {
                         control={
                             <Checkbox
                                 size="small"
-                                checked={formValues.close_at_eod}
+                                checked={formValues?.close_at_eod}
                                 onChange={handleInputChange}
                                 name="close_at_eod"
                             />
@@ -154,7 +202,7 @@ export const SimulationOptionsForm= () => {
                         control={
                             <Checkbox
                                 size="small"
-                                checked={formValues.allow_multiple_open_trades}
+                                checked={formValues?.allow_multiple_open_trades}
                                 onChange={handleInputChange}
                                 name="allow_multiple_open_trades"
                             />
@@ -166,7 +214,7 @@ export const SimulationOptionsForm= () => {
                         control={
                             <Checkbox
                                 size="small"
-                                checked={formValues.close_using_signal}
+                                checked={formValues?.close_using_signal}
                                 onChange={handleInputChange}
                                 name="close_using_signal"
                             />
@@ -180,7 +228,7 @@ export const SimulationOptionsForm= () => {
                         label="Max Hold (min)"
                         type="number"
                         name="max_hold_time"
-                        value={formValues.max_hold_time}
+                        value={formValues?.max_hold_time}
                         onChange={handleInputChange}
                         fullWidth
                         InputProps={{
@@ -196,7 +244,7 @@ export const SimulationOptionsForm= () => {
                         label="Max Gap Days"
                         type="number"
                         name="max_gap_days_allowed"
-                        value={formValues.max_gap_days_allowed}
+                        value={formValues?.max_gap_days_allowed}
                         onChange={handleInputChange}
                         fullWidth
                         InputProps={{
@@ -211,7 +259,7 @@ export const SimulationOptionsForm= () => {
                         label="Sell/Buy Threshold (%)"
                         type="number"
                         name="sell_or_buy_threshold"
-                        value={formValues.sell_or_buy_threshold}
+                        value={formValues?.sell_or_buy_threshold}
                         onChange={handleInputChange}
                         fullWidth
                         InputProps={{
@@ -228,7 +276,7 @@ export const SimulationOptionsForm= () => {
                         label="Risk Threshold"
                         type="number"
                         name="risk_threshold"
-                        value={formValues.risk_threshold}
+                        value={formValues?.risk_threshold}
                         onChange={handleInputChange}
                         fullWidth
                         InputProps={{
@@ -245,7 +293,7 @@ export const SimulationOptionsForm= () => {
                         <InputLabel>SL Type</InputLabel>
                         <Select
                             name="sl_type"
-                            value={formValues.sl_type}
+                            value={formValues?.sl_type}
                             label="SL Type"
                             onChange={handleSelectChange}
                         >
@@ -258,19 +306,19 @@ export const SimulationOptionsForm= () => {
                     <TextField
                         size="small"
                         label={
-                            formValues.sl_type === "percent"
+                            formValues?.sl_type === "percent"
                                 ? "SL Value (%)"
                                 : "SL Value ($)"
                         }
                         type="number"
                         name="sl_value"
-                        value={formValues.sl_value}
+                        value={formValues?.sl_value}
                         onChange={handleInputChange}
                         fullWidth
                         InputProps={{
                             inputProps: {
                                 min: 0,
-                                step: formValues.sl_type === "percent" ? 0.1 : 0.01,
+                                step: formValues?.sl_type === "percent" ? 0.1 : 0.01,
                             },
                         }}
                     />
@@ -280,7 +328,7 @@ export const SimulationOptionsForm= () => {
                         <InputLabel>TP Type</InputLabel>
                         <Select
                             name="tp_type"
-                            value={formValues.tp_type}
+                            value={formValues?.tp_type}
                             label="TP Type"
                             onChange={handleSelectChange}
                         >
@@ -294,7 +342,7 @@ export const SimulationOptionsForm= () => {
                         label="TP Value"
                         type="number"
                         name="tp_value"
-                        value={formValues.tp_value}
+                        value={formValues?.tp_value}
                         onChange={handleInputChange}
                         fullWidth
                         InputProps={{
@@ -308,17 +356,17 @@ export const SimulationOptionsForm= () => {
                     {/* Speed Slider */}
                     <Box>
                         <Typography variant="body2" gutterBottom>
-                            Speed: {formValues.speed}
+                            Speed: {formValues?.speed}
                         </Typography>
                         <Slider
                             size="small"
-                            value={formValues.speed}
+                            value={formValues?.speed}
                             onChange={handleSliderChange("speed")}
                             valueLabelDisplay="auto"
                             step={1}
                             marks
                             min={1}
-                            max={10}
+                            max={process.env.NEXT_PUBLIC_MAX_SPEED ? parseInt(process.env.NEXT_PUBLIC_MAX_SPEED) : 10}
                         />
                     </Box>
                 </Stack>

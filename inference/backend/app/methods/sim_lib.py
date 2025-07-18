@@ -126,6 +126,7 @@ async def create_trade_for_candle(
     SimulationOptions: SimulationOptions,
     pred_dict: Dict[str, Any],
     isRealtime: bool = False,
+    inf_config: Dict[str, Any] = {}
     ):
 
     buy_take = pred_dict["buy_take"]
@@ -134,8 +135,15 @@ async def create_trade_for_candle(
     sell_stop = pred_dict["sell_stop"]  
     signal = pred_dict["signal"]  
     current_close = current_candle.close
+    end_of_day_cutoff_hour = inf_config.get("inference").get("end_of_day_cutoff_hour", 15)
+    end_of_day_cutoff_minute = inf_config.get("inference").get("end_of_day_cutoff_minute", 40)
+    if current_candle.time.hour >= end_of_day_cutoff_hour and current_candle.time.minute >= end_of_day_cutoff_minute:
+        cutoff_passed = True
+    else:
+        cutoff_passed = False
 
     def open_trade_or_not():
+        
         if signal != 0 and not SimulationOptions.allow_multiple_open_trades:
             existing_trade = db.query(TradeRecord).filter(
                 TradeRecord.session_id == session.id,
@@ -149,7 +157,7 @@ async def create_trade_for_candle(
         return False
     
     open_trade = True if isRealtime else open_trade_or_not()
-    if open_trade and signal != 0:
+    if open_trade and signal != 0 and not cutoff_passed:
         status = "OPEN"
         entry_price = current_close
     else:
@@ -298,7 +306,8 @@ async def run_simulation_one_candle(
         SimulationOptions: SimulationOptions,
         model_high: Any,
         model_low: Any,
-        scalers: Dict[str, Any]
+        scalers: Dict[str, Any],
+        inf_config: Dict[str, Any] = {}
 ):
     pred_dict = await get_prediction_for_candle(
         db=db,
@@ -351,6 +360,7 @@ async def run_simulation_one_candle(
         )
     db.commit()  # Commit the changes to the database
     #db.refresh(TradeRecord)  # Refresh the session to get the latest data
+    
 
     new_trade_record = await create_trade_for_candle(
         db=db,
@@ -358,7 +368,8 @@ async def run_simulation_one_candle(
         current_candle=current_candle,
         SimulationOptions=SimulationOptions,
         pred_dict=pred_dict,
-        isRealtime=False
+        isRealtime=False,
+        inf_config=inf_config
     )
 
     return {

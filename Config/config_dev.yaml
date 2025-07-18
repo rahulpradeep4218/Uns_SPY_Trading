@@ -13,7 +13,10 @@ inference:
     refresh_token: 
       DAzSlpbUy357O-vmE5lG5eS0zJI3Dr3tPp9jLbzdEeqMDIW-qVQEdpP8jVSnRWljSIYPTVDChxyf72GKyBOdoExfNbl2k8nxiH-0RxgK9sQbkmVZmAbunCW2WWp41Jc5uzQtM4-VfqI@
     access_token: 
-      I0.b2F1dGgyLmJkYy5zY2h3YWIuY29t.PtOa8GZHn0XFMjZXt6ty0w4HY6b15GXnXF54-VI1a-Q@
+      I0.b2F1dGgyLmNkYy5zY2h3YWIuY29t.r-cz06tm8fZbgklQmPpUwrwpzqrScRlRoepoMnlZktI@
+  end_of_day_cutoff_hour: 15
+  end_of_day_cutoff_minute: 40
+  simulation_options_config_path: simulation_options.yaml
 
 training_details:
   all_data_path: /app/data/SPY_AllData.xlsx

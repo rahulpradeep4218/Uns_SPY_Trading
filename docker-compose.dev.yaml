@@ -138,6 +138,7 @@ services:
       NEXT_PUBLIC_LOW_MODEL_NAME: xgboost_power_low
       NEXT_PUBLIC_HIGH_MODEL_NAME: xgboost_power_high
       PORT: ${INFERENCE_FRONTEND_PORT}
+      NEXT_PUBLIC_MAX_SPEED: 20
 
   dagster_code:
     build:

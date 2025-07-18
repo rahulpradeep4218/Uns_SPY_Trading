@@ -80,7 +80,7 @@ function optimalDataPointWidth(xVal: number[]){
     console.log("Total time range:", totalTimeRange);
     const expectedCandleCount = totalTimeRange / (60*180000); // Assuming 1 minute candles
     console.log("Expected candle count:", expectedCandleCount);
-    const returnVal = Math.min(0.8, Math.max(0.00000000000000001, 0.8 / expectedCandleCount)); 
+    const returnVal = Math.min(0.8, Math.max(0.00000000000000001, 20 / expectedCandleCount)); 
     console.log("Calculated dataPointWidth:", returnVal);
     return returnVal;
 }
