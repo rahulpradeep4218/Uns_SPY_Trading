@@ -20,6 +20,7 @@ origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "https://rahulpradeep.com",
+    "http://localhost:6202",
 ]
 app.add_middleware(
     CORSMiddleware,
