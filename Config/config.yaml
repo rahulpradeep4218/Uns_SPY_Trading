@@ -13,17 +13,17 @@ inference:
     refresh_token: 
       DAzSlpbUy357O-vmE5lG5eS0zJI3Dr3tPp9jLbzdEeqMDIW-qVQEdpP8jVSnRWljSIYPTVDChxyf72GKyBOdoExfNbl2k8nxiH-0RxgK9sQbkmVZmAbunCW2WWp41Jc5uzQtM4-VfqI@
     access_token: 
-      I0.b2F1dGgyLmNkYy5zY2h3YWIuY29t.I4c03JnHzBcmsPC63HS6Tx0OdDdMGw-t3l_mehVjSZk@
+      I0.b2F1dGgyLmJkYy5zY2h3YWIuY29t.6MtOyhfqpOW3L_VygwI0_v7WHohbbiE1i7UuVvmuYSY@
   end_of_day_cutoff_hour: 15
   end_of_day_cutoff_minute: 40
   simulation_options_config_path: simulation_options.yaml
 training_details:
   all_data_path: /app/data/SPY_AllData.xlsx
   sheet_names: 1minData1-6-2022,1minData1-12-2023,1minData1-22-2024
-  train_start_date: '2023-01-01'
-  train_end_date: '2024-01-01'
-  test_start_date: '2024-02-01'
-  test_end_date: '2024-03-01'
+  train_start_date: '2024-01-01'
+  train_end_date: '2025-01-01'
+  test_start_date: '2025-01-02'
+  test_end_date: '2025-01-30'
   model_name: xgboost_power
   runs_folder: /app/training_runs
   parquet_viewer_link: 
@@ -37,7 +37,7 @@ training_details:
   qalpha_high: 0.25,0.9
   qalpha_low: 0.25,0.9
   num_boost_rounds: 20000
-  num_trials: 100
+  num_trials: 200
   early_stopping_rounds: 300
 common_config:
   normalize_timegap_threshold: 60
