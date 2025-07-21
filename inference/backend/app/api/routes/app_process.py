@@ -311,7 +311,7 @@ async def websocket_realtime(
                 inf_config['inference']['schwab']
             ) 
             sync_frequency = inf_config['inference']['schwab'].get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
-
+            logger.info(f"Sync frequency set to {sync_frequency} seconds")
             candles_query = db.query(PriceData).filter(
                 PriceData.symbol == session_record.symbol,
                 PriceData.time >= first_record_time
@@ -328,7 +328,7 @@ async def websocket_realtime(
                 
                 now = time.time()
                 if now - last_sync_time >= sync_frequency:
-                    print(f"Syncing realtime data for session {session_id} at {current_candle.time}")
+                    logger.info(f"Syncing realtime data for session {session_id} at {current_candle.time}")
                     first_record_time = sync_realtime_price_history(
                         session_record.symbol,
                         inf_config['inference']['schwab']
@@ -341,6 +341,7 @@ async def websocket_realtime(
                         await check_trade_exit(trade, current_candle, sim_options)
                     db.commit()  # Commit the changes to the database
                     last_sync_time = time.time()
+                    logger.info(f"Last sync time updated to {last_sync_time}")
                 else:
                     trade_candle = db.query(TradeRecord).filter(
                         TradeRecord.session_id == session_id,
