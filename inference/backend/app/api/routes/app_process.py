@@ -289,37 +289,38 @@ async def websocket_realtime(
     session_id = 0
     await websocket.accept()
     try:
+        last_sync_time = 0
+        logger.info("Waiting for initial data from client...")
+        initial_data = await websocket.receive_json()
+        logger.info("Session id : %d", session_id)
+        sim_options = SimulationOptions(**initial_data['options'])
+        session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
+        if not session_record:
+            await websocket.close(code=1008, reason="Realtime Session not found")
+            return
+        high_alias = session_record.model_high_alias if session_record.model_high_alias else None
+        if not high_alias:
+            await websocket.close(code=1008, reason="Session high model alias not found")
+            return
+        
+        scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
+        logger.info("Scalers and models loaded successfully. Running sync realtime for once before entering loop")
+        first_record_time = sync_realtime_price_history(
+            session_record.symbol,
+            inf_config['inference']['schwab']
+        ) 
+        sync_frequency = inf_config['inference']['schwab'].get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
+        logger.info(f"Sync frequency set to {sync_frequency} seconds")
+        candles_query = db.query(PriceData).filter(
+            PriceData.symbol == session_record.symbol,
+            PriceData.time >= first_record_time
+        ).order_by(PriceData.time.desc())
+        
+        candles = candles_query.all()
+        print(f"Total candles to process: {len(candles)}")
+        
         while True:
-            logger.info("Waiting for initial data from client...")
-            initial_data = await websocket.receive_json()
-            logger.info("Session id : %d", session_id)
-            sim_options = SimulationOptions(**initial_data['options'])
             
-            session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
-            if not session_record:
-                await websocket.close(code=1008, reason="Realtime Session not found")
-                return
-            high_alias = session_record.model_high_alias if session_record.model_high_alias else None
-            if not high_alias:
-                await websocket.close(code=1008, reason="Session high model alias not found")
-                return
-            
-            scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
-            logger.info("Scalers and models loaded successfully. Running sync realtime for once before entering loop")
-            first_record_time = sync_realtime_price_history(
-                session_record.symbol,
-                inf_config['inference']['schwab']
-            ) 
-            sync_frequency = inf_config['inference']['schwab'].get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
-            logger.info(f"Sync frequency set to {sync_frequency} seconds")
-            candles_query = db.query(PriceData).filter(
-                PriceData.symbol == session_record.symbol,
-                PriceData.time >= first_record_time
-            ).order_by(PriceData.time.desc())
-            
-            candles = candles_query.all()
-            print(f"Total candles to process: {len(candles)}")
-            last_sync_time = 0
 
             for current_candle in candles:
                 # Simulate processing time based on speed factor
@@ -390,7 +391,6 @@ async def websocket_realtime(
                     "type": "trade_table",
                     "data": trade_table
                 })
-
     except WebSocketDisconnect:
         print(f"Client disconnected from session {session_id}")
 

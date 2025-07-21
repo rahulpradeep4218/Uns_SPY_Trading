@@ -5,8 +5,8 @@ realtime:
   end_time: '2025-07-18T07:06:44.168000Z'
   max_gap_days_allowed: 9
   max_hold_time: 120
-  risk_threshold: 0.8
-  sell_or_buy_threshold: 3.0
+  risk_threshold: 2.0
+  sell_or_buy_threshold: 5.0
   sl_type: percent
   sl_value: 0.8
   speed: 13.0
