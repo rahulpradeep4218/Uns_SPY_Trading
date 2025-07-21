@@ -1,13 +1,22 @@
+inference:
+  schwab:
+    auth_url: 'https://api.schwabapi.com/v1/oauth/token'
+    client_id: 'tOjR9AoDxLqEtPR2h8v76KiWAFApOgA3'
+    client_secret: 'EHnICMi3OZS97wAd'
+    redirect_uri: 'https://rahulpradeep.com/trading/charles/callback'
+    refresh_token: 'your_refresh_token_here'
+    access_token: 'your_access_token_here'
 training_details:
-  all_data_path: '../data/SPY_AllData.xlsx'
-  sheet_names: '1minData1-6-2022,1minData1-12-2023,1minData1-22-2024'
+  all_data_path: '/app/data/SPY_AllData.xlsx'
+  sheet_names: '1minData1-6-2022,1minData1-12-2023'
   train_start_date: '2023-01-01'
   train_end_date: '2023-01-11'
   test_start_date: '2023-02-01'
   test_end_date: '2023-02-11'
   model_name: 'xgboost_power'
-  runs_folder: 'training_runs'
-  parquet_viewer_link: 'http://localhost:8501/parquet_viewer'
+  runs_folder: '/app/training_runs'
+  parquet_viewer_link: 'https://rahulpradeep.com/trading/ui/parquet_viewer'
+  mlflow_config_artifact_name: 'training_config.yaml'
   eval_metric: 'quantile'
   high_label_column: 'High_Label'
   low_label_column: 'Low_Label'
@@ -28,9 +37,15 @@ trade_parameters:
   amount_per_trade: 10
   trade_init_ratio_threshold: 3
   trade_risk_ratio_threshold: 0.8
+
 mlflow:
   experiment_name: 'xgboost_power'
-  tracking_uri: 'http://localhost:5000'
+  tracking_uri: 'http://mlflow:5001'
+  high_model_name: 'xgboost_power_high'
+  low_model_name: 'xgboost_power_low'
+  scaler_artifact_path: 'scalers'
+  artifact_download_path: 'C:/Projects/Trading/Uns_SPY_Trading/local_artifacts'
+
 scaling:
   minmax:
     columns: 'bolband,donchn,tchr,atr,volatility,momentum,pivot,ma_20,ma_50,ma_100,ema_20'

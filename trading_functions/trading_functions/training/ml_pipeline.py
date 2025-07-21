@@ -476,7 +476,7 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
         context.log.info(f"Quantile loss for {high_low} labels: {q_loss}")
         mlflow.log_metric(f'quantile_loss_{high_low}', q_loss)
         mlflow.log_metric('best_iteration', best_iteration)
-        mlflow.log_artifact(scaler_path, artifact_path='model')
+        mlflow.log_artifact(scaler_path, artifact_path='run_model')
         context.log.info(f"Model {high_low} scalers logged from path: {scaler_path}")
         
         #Log config dictionary as an artifact
@@ -485,7 +485,7 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
         with open(config_file_path, 'w') as f:
             yaml.dump(config, f)
         context.log.info(f"Config file saved to {config_file_path} , and artifact uri : {run.info.artifact_uri}")
-        mlflow.log_artifact(config_file_path, artifact_path='model')
+        mlflow.log_artifact(config_file_path, artifact_path='run_model')
         
         mlflow.xgboost.log_model(
             xgb_model,
@@ -502,13 +502,13 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
             name=f"{model_name}_{high_low}",
             version=str(latest_version),
             key="training_start",
-            value=config['training_details']['train_start_date'] + "00:00:00"
+            value=config['training_details']['train_start_date'] + " 00:00:00"
         )
         client.set_model_version_tag(
             name=f"{model_name}_{high_low}",
             version=str(latest_version),
             key="training_end",
-            value=config['training_details']['train_end_date'] + "23:59:00"
+            value=config['training_details']['train_end_date'] + " 23:59:00"
         )
 
         mlflow_run_id = run.info.run_id

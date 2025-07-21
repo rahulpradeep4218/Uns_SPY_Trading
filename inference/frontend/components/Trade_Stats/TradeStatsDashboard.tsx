@@ -50,10 +50,12 @@ export default function TradeStatsDashboard() {
         setConnectionStatus('Connecting....');
         const rawUrl = process.env.NEXT_PUBLIC_INF_URL;
         const strippedUrl = rawUrl?.replace(/^https?:\/\//, "");
-        const wsProtocol = rawUrl?.startsWith('https') ? 'wss' : 'ws';
+        //const wsProtocol = rawUrl?.startsWith('https') ? 'wss' : 'ws';
+        const wsProtocol = 'wss'; // Force WebSocket Secure (wss) for all connections
+        const window_url = window.location.origin.replace(/^http/, 'ws');
         const socketUrl = isRealtime 
-            ? `${wsProtocol}://${strippedUrl}/api/process/ws/realtime`
-            : `${wsProtocol}://${strippedUrl}/api/process/ws/simulation/${selected_session}`;
+            ? `${window_url}/${strippedUrl}/api/process/ws/realtime`
+            : `${window_url}/${strippedUrl}/api/process/ws/simulation/${selected_session}`;
 
         const socket = new WebSocket(socketUrl);
         setWsConnection(socket);

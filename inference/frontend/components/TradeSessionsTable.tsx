@@ -80,12 +80,15 @@ export default function TradeSessionsTable() {
         const fetchSessionDetails = async () => {
             try{
                 console.log("Fetching session details for ID:", sess_id);
-                const response = await axios.get(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/get_session/${sess_id}/`);
-                console.log("Session details response:", response.data);
-                const session_record = response.data.session
-                const trade_stats = response.data.trade_stats;
-                const trade_records = response.data.trades;
-                const last_trade_signal_time = response.data.last_trade_signal_time;
+                const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+                console.log("Base URL for fetching session details:", baseUrl);
+                const response = await fetch(`${baseUrl}/api/process/get_session/${sess_id}`);
+                const jsonResponse = await response.json();
+                console.log("Session details response:", jsonResponse);
+                const session_record = jsonResponse.session
+                const trade_stats = jsonResponse.trade_stats;
+                const trade_records = jsonResponse.trades;
+                const last_trade_signal_time = jsonResponse.last_trade_signal_time;
                 console.log("Fetched session details:", session_record);
                 setModelHighAlias(session_record.model_high_alias);
                 console.log("Setting model_high_alias to:", session_record.model_high_alias);
@@ -166,9 +169,12 @@ export default function TradeSessionsTable() {
 
     useEffect(() => {
         const fetchData = async () => {
-            const inf_url = process.env.NEXT_PUBLIC_INF_URL;
-            console.log("Fetching trade sessions from:", inf_url);
-            const response = await axios.get(`${inf_url}/api/trade_sessions?type=Simulated`);
+            
+            const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+            console.log("Base Url for fetching sessions :", baseUrl);
+            const fullUrl = `${baseUrl}/api/trade_sessions/?type=Simulated`;
+            console.log("Fetching trade sessions from URL:", fullUrl);
+            const response = await fetch(`${fullUrl}`);
             // console.log("API data sample:", {
             //     firstItem: response.data[0],
             //     keys: Object.keys(response.data[0]),
@@ -177,7 +183,8 @@ export default function TradeSessionsTable() {
             //         trade_end: typeof response.data[0].trade_end
             //     }
             // });
-            const sessionsWithDates = response.data.map((session: TradeSession) => ({
+            const jsonData = await response.json();
+            const sessionsWithDates = jsonData.map((session: TradeSession) => ({
                 ...session,
                 // Preserve original string dates for debugging
                 original_start: session.trade_start,
@@ -194,7 +201,15 @@ export default function TradeSessionsTable() {
     }, []);
 
     const handleDelete = async (id: number) => {
-        await axios.delete(`${process.env.NEXT_PUBLIC_INF_URL}/api/trade_sessions/${id}/`);
+        const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+        const res = await fetch(`${baseUrl}/api/trade_sessions/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (!res.ok) {
+            console.error("Failed to delete session with ID:", id);
+            return;
+        }
         setSessions(sessions.filter(session => session.id !== id));
     };
 
@@ -217,14 +232,29 @@ export default function TradeSessionsTable() {
             currentSession.model_low_alias = model_low_alias;
             currentSession.model_low_version = model_low_version ? Number(model_low_version) : undefined;
             console.log("Time start :", timeRange.start);
-
-            const response = currentSession.id
-                ? await axios.put(`${inf_url}/api/trade_sessions/${currentSession.id}/`, currentSession)
-                : await axios.post(`${inf_url}/api/trade_sessions/`, currentSession);
-
+            
+            const method = currentSession.id ? 'PUT' : 'POST';
+            const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+            console.log("Base URL for saving session:", baseUrl);
+            const url = currentSession.id
+                ? `${baseUrl}/api/trade_sessions/${currentSession.id}`
+                : `${baseUrl}/api/trade_sessions/`;
+            
+            const response = await fetch(url, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(currentSession),
+            });
+            if (!response.ok) {
+                console.error("Failed to save session:", response.statusText);
+                return;
+            }
+            const  responseData = await response.json();
             setSessions(currentSession.id
-                ? sessions.map(session => session.id === currentSession.id ? response.data : session)
-                : [...sessions, response.data]);
+                ? sessions.map(session => session.id === currentSession.id ? responseData : session)
+                : [...sessions, responseData]);
         } 
 
 
@@ -326,9 +356,23 @@ export default function TradeSessionsTable() {
                     alert("Please select a session to clear trades.");
                     return;
                 }
-                const deleteResponse = await axios.get(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/remove_all_trades/${selected_session}`);
-                console.log("Delete response:", deleteResponse.data);
-                updateCurrentSessionData(selected_session);
+
+                try {
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/remove_all_trades/${selected_session}`, {
+                        method: 'GET'
+                    });
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        throw new Error(`Failed to clear trades: status : ${res.status} , text :  ${errorText}`);
+                    }
+
+                    const data = await res.json();
+                    console.log("Delete response:", data);
+                    updateCurrentSessionData(selected_session);
+                } catch (error) {
+                    console.error("Error clearing trades:", error);
+                    alert(`Failed to clear trades because of error: ${error}`);
+                }
             }}
             >
                 Clear All Trades 

@@ -83,81 +83,11 @@ server {
         return 302 /oauth2/sign_in?rd=$request_uri;
     }
 
-    
-    location ~* ^/trading/?$ {
-        return 301 /trading/ui/dashboard;
-    }
-
-    location ~* ^/trading/ui/?$ {
-        return 301 /trading/ui/dashboard;
+    location = /trading {
+        return 301 /trading/ui/;
     }
 
     location /trading/ui/ {
-        auth_request /oauth2/auth;
-        error_page 401 = @oauth2_signin;
-        proxy_pass http://inf_frontend:6393/trading/ui/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-
-    location trading/ui/_next/static/ {
-        auth_request /oauth2/auth;
-        error_page 401 = @oauth2_signin;
-        proxy_pass http://inf_frontend:8501/trading/ui/_next/static/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-    }
-
-    location /backend-api/ {
-        auth_request /oauth2/auth;
-        error_page 401 = @oauth2_signin;
-        
-        proxy_pass http://inf_backend:8000/;
-
-        # Add websocket headers
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-
-        # Add standard headers
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-
-    location /trading/backend/ {
-        auth_request /oauth2/auth;
-        error_page 401 = @oauth2_signin;
-        proxy_pass http://inf_backend:8000/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Required for Dagster to work behind a proxy:
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-
-
-
-    location /trading/backend-ui/ {
         auth_request /oauth2/auth;
         error_page 401 = @oauth2_signin;
         proxy_pass http://streamlit:8501/;
@@ -172,7 +102,7 @@ server {
 
     }
 
-    location /trading/backend-ui/static/ {
+    location /trading/ui/static/ {
         auth_request /oauth2/auth;
         error_page 401 = @oauth2_signin;
         proxy_pass http://streamlit:8501/static/;
@@ -187,7 +117,7 @@ server {
 
     }
 
-    location /trading/backend-ui/_stcore/ {
+    location /trading/ui/_stcore/ {
         auth_request /oauth2/auth;
         error_page 401 = @oauth2_signin;
         proxy_pass http://streamlit:8501/_stcore/;
@@ -199,7 +129,7 @@ server {
 
     }
 
-    location /trading/backend-ui/_stcore/stream {
+    location /trading/ui/_stcore/stream {
         proxy_pass http://streamlit:8501/_stcore/stream;
         proxy_http_version 1.1;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

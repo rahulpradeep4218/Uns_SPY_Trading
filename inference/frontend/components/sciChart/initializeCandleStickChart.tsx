@@ -51,7 +51,7 @@ import {
     LabelProviderBase2D,
     EAxisType,
     DateLabelProvider,
-    DataLabelProvider
+    DataLabelProvider,
 } from "scichart";
 
 import { appTheme } from "@/app/theme";
@@ -80,7 +80,7 @@ function optimalDataPointWidth(xVal: number[]){
     console.log("Total time range:", totalTimeRange);
     const expectedCandleCount = totalTimeRange / (60*180000); // Assuming 1 minute candles
     console.log("Expected candle count:", expectedCandleCount);
-    const returnVal = Math.min(0.8, Math.max(0.00000000000000001, 20 / expectedCandleCount)); 
+    const returnVal = Math.min(0.6, Math.max(0.00000000000000001, 5 / expectedCandleCount)); 
     console.log("Calculated dataPointWidth:", returnVal);
     return returnVal;
 }
@@ -88,8 +88,12 @@ export const initializeCandleStickChart = async (
     divElementId: string | HTMLDivElement,
     candleDataSeriesRef: React.RefObject<OhlcDataSeries | null>
 ) => {
+    SciChartSurface.configure({
+        wasmUrl: "/trading/ui/scichart2d.wasm",
+        dataUrl: "/trading/ui/scichart2d.data",
+    });
     const { sciChartSurface, wasmContext } = await SciChartSurface.create(divElementId, {
-        theme: appTheme.SciChartJsTheme
+        theme: appTheme.SciChartJsTheme,
     });
     
     const inf_url = process.env.NEXT_PUBLIC_INF_URL;

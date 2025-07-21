@@ -1,4 +1,5 @@
 from ast import In
+from hmac import new
 from tabnanny import check
 from sqlalchemy.exc import IntegrityError
 from fastapi import WebSocket, WebSocketDisconnect
@@ -332,7 +333,8 @@ async def run_simulation_one_candle(
             current_candle=current_candle,
             SimulationOptions=SimulationOptions,
             pred_dict=pred_dict,
-            isRealtime=False
+            isRealtime=False,
+            inf_config=inf_config
         )
         return {
             "status": pred_dict["status"],
@@ -386,7 +388,8 @@ async def run_realtime_one_candle(
         SimulationOptions: SimulationOptions,
         model_high: Any,
         model_low: Any,
-        scalers: Dict[str, Any]
+        scalers: Dict[str, Any],
+        inf_config: Dict[str, Any] = {}
 ):
     pred_dict = await get_prediction_for_candle(
         db=db,
@@ -411,9 +414,10 @@ async def run_realtime_one_candle(
         current_candle=current_candle,
         SimulationOptions=SimulationOptions,
         pred_dict=pred_dict,
-        isRealtime=True
+        isRealtime=True,
+        inf_config=inf_config
     )
-    if pred_dict["signal"] != 0:
+    if pred_dict["signal"] != 0 and new_trade_record.status == "OPEN":
         ahead_candles = db.query(PriceData).filter(
             PriceData.symbol == session.symbol,
             PriceData.time > current_candle.time

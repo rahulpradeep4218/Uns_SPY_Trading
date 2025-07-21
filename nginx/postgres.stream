@@ -1,0 +1,14 @@
+# /etc/nginx/conf.d/postgres.stream
+
+upstream postgres_upstream {
+    server postgres:5432;  # Match the Docker container name
+}
+
+server {
+    listen 5432;  # Or use a different external port like 5433
+    proxy_pass postgres_upstream;
+
+    # (Optional) restrict access by IP
+    allow 192.168.0.0/16;  # or your LAN subnet
+    deny all;
+}

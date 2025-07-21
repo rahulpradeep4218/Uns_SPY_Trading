@@ -1,68 +1,80 @@
 inference:
   schwab:
-    auth_url: 'https://api.schwabapi.com/v1/oauth/token'
-    client_id: 'tOjR9AoDxLqEtPR2h8v76KiWAFApOgA3'
-    client_secret: 'EHnICMi3OZS97wAd'
-    redirect_uri: 'https://rahulpradeep.com/trading/charles/callback'
-    refresh_token: 'your_refresh_token_here'
-    access_token: 'your_access_token_here'
+    symbol: SPY
+    base_oauth_url: https://api.schwabapi.com/v1/oauth
+    market_data_url: https://api.schwabapi.com/marketdata/v1
+    token_url_add: /token
+    auth_url_add: /authorize
+    client_id: tOjR9AoDxLqEtPR2h8v76KiWAFApOgA3
+    client_secret: EHnICMi3OZS97wAd
+    redirect_uri: https://rahulpradeep.com/trading/backend/api/schwab/callback
+    realtime_period_days: 2
+    realtime_schwab_sync_frequency: 10
+    refresh_token: 
+      DAzSlpbUy357O-vmE5lG5eS0zJI3Dr3tPp9jLbzdEeqMDIW-qVQEdpP8jVSnRWljSIYPTVDChxyf72GKyBOdoExfNbl2k8nxiH-0RxgK9sQbkmVZmAbunCW2WWp41Jc5uzQtM4-VfqI@
+    access_token: 
+      I0.b2F1dGgyLmNkYy5zY2h3YWIuY29t.I4c03JnHzBcmsPC63HS6Tx0OdDdMGw-t3l_mehVjSZk@
+  end_of_day_cutoff_hour: 15
+  end_of_day_cutoff_minute: 40
+  simulation_options_config_path: simulation_options.yaml
 training_details:
-  all_data_path: '/app/data/SPY_AllData.xlsx'
-  sheet_names: '1minData1-6-2022,1minData1-12-2023'
+  all_data_path: /app/data/SPY_AllData.xlsx
+  sheet_names: 1minData1-6-2022,1minData1-12-2023,1minData1-22-2024
   train_start_date: '2023-01-01'
-  train_end_date: '2023-01-11'
-  test_start_date: '2023-02-01'
-  test_end_date: '2023-02-11'
-  model_name: 'xgboost_power'
-  runs_folder: '/app/training_runs'
-  parquet_viewer_link: 'https://rahulpradeep.com/trading/ui/parquet_viewer'
-  mlflow_config_artifact_name: 'training_config.yaml'
-  eval_metric: 'quantile'
-  high_label_column: 'High_Label'
-  low_label_column: 'Low_Label'
+  train_end_date: '2024-01-01'
+  test_start_date: '2024-02-01'
+  test_end_date: '2024-03-01'
+  model_name: xgboost_power
+  runs_folder: /app/training_runs
+  parquet_viewer_link: 
+    https://rahulpradeep.com/trading/backend-ui/parquet_viewer
+  mlflow_config_artifact_name: training_config.yaml
+  eval_metric: quantile
+  high_label_column: High_Label
+  low_label_column: Low_Label
   test_size: 0.2
   random_state: 42
-  qalpha_high: '0.25,0.9'
-  qalpha_low: '0.25,0.9'
+  qalpha_high: 0.25,0.9
+  qalpha_low: 0.25,0.9
   num_boost_rounds: 20000
-  num_trials: 50
+  num_trials: 100
   early_stopping_rounds: 300
 common_config:
   normalize_timegap_threshold: 60
-  close_transform_columns: 'bolband,donchn,pivot,ma_20,ma_50,ma_100,ema_20'
-  initial_columns: 'Date,Open,High,Low,Close,Volume'
+  close_transform_columns: bolband,donchn,pivot,ma_20,ma_50,ma_100,ema_20
+  initial_columns: Date,Open,High,Low,Close,Volume
   num_bars_to_look_labels: 20
   label_scaling_multiplier: 10000
 trade_parameters:
   amount_per_trade: 10
   trade_init_ratio_threshold: 3
   trade_risk_ratio_threshold: 0.8
-
 mlflow:
-  experiment_name: 'xgboost_power'
-  tracking_uri: 'http://mlflow:5001'
-  high_model_name: 'xgboost_power_high'
-  low_model_name: 'xgboost_power_low'
-  scaler_artifact_path: 'scalers'
-  artifact_download_path: 'C:/Projects/Trading/Uns_SPY_Trading/local_artifacts'
-
+  experiment_name: xgboost_power
+  tracking_uri: http://mlflow:5001
+  high_model_name: xgboost_power_high
+  low_model_name: xgboost_power_low
+  scaler_artifact_path: scalers
+  artifact_download_path: /model_local_artifacts
 scaling:
   minmax:
-    columns: 'bolband,donchn,tchr,atr,volatility,momentum,pivot,ma_20,ma_50,ma_100,ema_20'
+    columns: 
+      bolband,donchn,tchr,atr,volatility,momentum,pivot,ma_20,ma_50,ma_100,ema_20
   standard:
     columns: ''
   robust:
     columns: ''
 training_parameters:
-  active_parameters: 'objective,tree_method,eval_metric,gamma,max_depth,learning_rate,subsample,colsample_bytree,min_child_weight,lambda,alpha'
-  base_parameters: 'objective,tree_method,eval_metric'
+  active_parameters: 
+    objective,tree_method,eval_metric,gamma,max_depth,learning_rate,subsample,colsample_bytree,min_child_weight,lambda,alpha
+  base_parameters: objective,tree_method,eval_metric
   params_list:
   - name: objective
     type: str
     hp: false
     log: false
     value: reg:quantileerror
-  - name: 'tree_method'
+  - name: tree_method
     type: str
     hp: false
     log: false
@@ -72,51 +84,51 @@ training_parameters:
     hp: false
     log: false
     value: quantile
-  - name: 'gamma'
+  - name: gamma
     type: float
     hp: true
     log: false
     min: 0.0
     max: 10.0
     value: 3.2
-  - name: 'max_depth'
+  - name: max_depth
     type: int
     hp: true
     log: false
     min: 3
     max: 12
     value: 6
-  - name: 'learning_rate'
+  - name: learning_rate
     type: float
     hp: true
     log: true
     min: 0.001
     max: 0.3
-  - name: 'subsample'
+  - name: subsample
     type: float
     hp: true
     log: false
     min: 0.5
     max: 1.0
-  - name: 'colsample_bytree'
+  - name: colsample_bytree
     type: float
     hp: true
     log: false
     min: 0.5
     max: 1.0
-  - name: 'min_child_weight'
+  - name: min_child_weight
     type: float
     hp: true
     log: false
     min: 1.0
     max: 10.0
-  - name: 'lambda'
+  - name: lambda
     type: float
     hp: true
     log: false
     min: 0.0
     max: 10.0
-  - name: 'alpha'
+  - name: alpha
     type: float
     hp: true
     log: false

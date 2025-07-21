@@ -14,17 +14,17 @@ realtime:
   tp_type: abs
   tp_value: 1.0
 simulation:
-  allow_multiple_open_trades: false
-  close_at_eod: false
+  allow_multiple_open_trades: true
+  close_at_eod: true
   close_using_signal: true
   end_time: '2025-07-18T07:06:44.168000Z'
   max_gap_days_allowed: 9
   max_hold_time: 120
-  risk_threshold: 0.8
-  sell_or_buy_threshold: 3.0
+  risk_threshold: 2.0
+  sell_or_buy_threshold: 4.0
   sl_type: percent
   sl_value: 0.8
-  speed: 4.0
+  speed: 27.0
   start_time: '2025-07-18T07:06:44.168000Z'
   tp_type: abs
   tp_value: 1.0

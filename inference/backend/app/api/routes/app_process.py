@@ -356,7 +356,8 @@ async def websocket_realtime(
                         sim_options,
                         model_high,
                         model_low,
-                        scalers
+                        scalers,
+                        inf_config=inf_config
                     )
 
                 candle_data = db.query(PriceData).filter(
