@@ -172,6 +172,25 @@ export default function TradeStatsDashboard() {
         setSimulationRun(false);
     };
 
+    const clearTrades = async() => {
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/remove_all_trades/0`, {
+                method: 'GET'
+            });
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`Failed to clear trades: status : ${res.status} , text :  ${errorText}`);
+            }
+
+            const data = await res.json();
+            console.log("Delete response:", data);
+            //updateCurrentSessionData(selected_session);
+        } catch (error) {
+            console.error("Error clearing trades:", error);
+            alert(`Failed to clear trades because of error: ${error}`);
+        }
+    }
+
     return (
         <>
 
@@ -215,11 +234,11 @@ export default function TradeStatsDashboard() {
                 >
                     Stop Simulation
                 </Button>
-
+            {isRealtime && (
                 <Button 
                     variant="contained" 
                     color="error" 
-                    onClick={resetSimulation}
+                    onClick={clearTrades}
                     sx={{ 
                         ml: 0.5,
                         backgroundColor: 'blue',
@@ -228,8 +247,9 @@ export default function TradeStatsDashboard() {
                         }
                     }}
                 >
-                    Reset
+                    Clear Trades
                 </Button>
+            )}
 
         </Box>
 

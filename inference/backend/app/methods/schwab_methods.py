@@ -11,6 +11,7 @@ from app.db.models import PriceData
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import func
 import logging
 
 logger = logging.getLogger(__name__)
@@ -243,6 +244,18 @@ def sync_realtime_price_history(
     #print("Number of rows fetched:", len(df))
     #print(df.tail())
 
+    latest_db_time = db.query(func.max(PriceData.time)).filter(
+        PriceData.symbol == symbol
+    ).scalar()
+
+    if latest_db_time:
+        logger.info(f"Latest DB time for {symbol}: {latest_db_time}")
+        df = df[df['time'] > latest_db_time]  # Step 3: Filter new rows only
+    else:
+        logger.info(f"No existing price data found for {symbol}. Inserting all candles.")
+    if df.empty:
+        logger.info(f"No new data to insert for {symbol}.")
+        return first_record_time
     rows = [
         {
             'symbol': symbol,

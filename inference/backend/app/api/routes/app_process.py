@@ -329,7 +329,7 @@ async def websocket_realtime(
                 
                 now = time.time()
                 if now - last_sync_time >= sync_frequency:
-                    logger.info(f"Syncing realtime data for session {session_id} at {current_candle.time}")
+                    logger.debug(f"Syncing realtime data for session {session_id} at {current_candle.time}")
                     first_record_time = sync_realtime_price_history(
                         session_record.symbol,
                         inf_config['inference']['schwab']
@@ -342,7 +342,19 @@ async def websocket_realtime(
                         await check_trade_exit(trade, current_candle, sim_options)
                     db.commit()  # Commit the changes to the database
                     last_sync_time = time.time()
-                    logger.info(f"Last sync time updated to {last_sync_time}")
+                    logger.debug(f"Last sync time updated to {last_sync_time}")
+
+                    candle_data = db.query(PriceData).filter(
+                        PriceData.symbol == session_record.symbol,
+                        PriceData.time >= first_record_time,
+                    ).order_by(PriceData.time.asc()).all()
+                    
+                    candles_list = [can for can in candle_data]
+                    candle_table = jsonable_encoder(candles_list)
+                    await websocket.send_json({
+                        "type": "candle_data",
+                        "data": candle_table
+                    })
                 else:
                     trade_candle = db.query(TradeRecord).filter(
                         TradeRecord.session_id == session_id,
@@ -362,18 +374,8 @@ async def websocket_realtime(
                         inf_config=inf_config
                     )
 
-                candle_data = db.query(PriceData).filter(
-                    PriceData.symbol == session_record.symbol,
-                    PriceData.time >= first_record_time,
-                ).all()
+                
                 progress = 0
-                candles_list = [can for can in candle_data]
-                candle_table = jsonable_encoder(candles_list)
-                await websocket.send_json({
-                    "type": "candle_data",
-                    "data": candle_table
-                })
-
                 all_trades, trade_stats = get_trade_and_trade_stats(
                     db,
                     session_id,

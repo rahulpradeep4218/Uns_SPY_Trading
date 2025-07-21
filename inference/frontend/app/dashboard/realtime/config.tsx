@@ -69,12 +69,19 @@ export default function RealtimeConfig() {
             const fetchSessionDetails = async () => {
                 try{
                     console.log("Fetching session details for ID:", sess_id);
-                    const response = await axios.get(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/get_session/${sess_id}/`);
-                    console.log("Session details response:", response.data);
-                    const session_record = response.data.session
-                    const trade_stats = response.data.trade_stats;
-                    const trade_records = response.data.trades;
-                    const last_trade_signal_time = response.data.last_trade_signal_time;
+                    const response = await fetch(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/get_session/${sess_id}`, {
+                        method: 'GET',
+                    });
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Failed to fetch realtime session details: status : ${response.status} , text :  ${errorText}`);
+                    }
+                    const res_data = await response.json();
+                    console.log("Session details response:", res_data);
+                    const session_record = res_data.session
+                    const trade_stats = res_data.trade_stats;
+                    const trade_records = res_data.trades;
+                    const last_trade_signal_time = res_data.last_trade_signal_time;
                     console.log("Fetched session details:", session_record);
                     setModelHighAlias(session_record.model_high_alias);
                     console.log("Setting model_high_alias to:", session_record.model_high_alias);

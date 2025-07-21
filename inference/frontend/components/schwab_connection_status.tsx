@@ -60,7 +60,7 @@ export const ConnectionStatusChecker = () => {
     useEffect(() => {
         if (isPolling) {
             checkConnection();
-            intervalRef.current = setInterval(checkConnection, 10000);
+            intervalRef.current = setInterval(checkConnection, 20000);
         }
         return () => {
             if (intervalRef.current) {
