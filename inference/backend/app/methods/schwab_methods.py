@@ -11,6 +11,9 @@ from app.db.models import PriceData
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from sqlalchemy.dialects.postgresql import insert
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 yaml = YAML()
@@ -236,6 +239,7 @@ def sync_realtime_price_history(
     )
     df['time'] = pd.to_datetime(df['time'], format="%Y-%m-%d %H:%M:%S")
     first_record_time = df['time'].iloc[0]
+    logger.info(f"First record time for {symbol} is {first_record_time}")
     #print("Number of rows fetched:", len(df))
     #print(df.tail())
 

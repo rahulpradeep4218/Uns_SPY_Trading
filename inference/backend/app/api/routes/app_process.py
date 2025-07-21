@@ -96,7 +96,7 @@ async def set_simulation_options(options: SimulationOptions, type: str = Query(d
     inf_config_path = os.getenv('CONFIG_PATH', 'NO_PATH')
     config_dir = os.path.dirname(inf_config_path)
     simulation_options_path = os.path.join(config_dir, simulation_options_path)
-    
+
     with open(simulation_options_path, 'r') as file:
         complete_simulation_options = yaml.safe_load(file)
 
@@ -290,9 +290,9 @@ async def websocket_realtime(
     await websocket.accept()
     try:
         while True:
-            print("Waiting for initial data from client...")
+            logger.info("Waiting for initial data from client...")
             initial_data = await websocket.receive_json()
-            print("Session id : ", session_id)
+            logger.info("Session id : %d", session_id)
             sim_options = SimulationOptions(**initial_data['options'])
             
             session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
@@ -305,7 +305,7 @@ async def websocket_realtime(
                 return
             
             scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
-            print("Scalers and models loaded successfully. Running sync realtime for once before entering loop")
+            logger.info("Scalers and models loaded successfully. Running sync realtime for once before entering loop")
             first_record_time = sync_realtime_price_history(
                 session_record.symbol,
                 inf_config['inference']['schwab']
