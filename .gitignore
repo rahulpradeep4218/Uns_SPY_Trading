@@ -185,4 +185,4 @@ mlflow_artifacts/*
 dagster_files/*
 cert/*
 oauth2/allowed_emails
-*config*.yaml
+**/*.yaml
