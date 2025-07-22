@@ -321,7 +321,7 @@ async def websocket_realtime(
         
         while True:
             
-
+            await asyncio.sleep(1.0)
             for current_candle in candles:
                 # Simulate processing time based on speed factor
                 #await asyncio.sleep(1.0 / speed)
