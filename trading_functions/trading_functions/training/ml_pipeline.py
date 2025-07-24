@@ -21,6 +21,9 @@ from trading_functions.training.utility import (
 )
 import xgboost as xgb
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
+from trading_functions.db.session import SessionLocal, INF_DATABASE_URL
+from sqlalchemy.orm import Session
+from trading_functions.db.models import PriceData
                                
 from dagster import MetadataValue
 
@@ -44,6 +47,29 @@ def get_filtered_data(df, start_date_str, end_date_str):
     filtered_data = filtered_data.reset_index(drop=True)
     return filtered_data
 
+def get_data_from_db(start_date, end_date, context=None):
+    db: Session = SessionLocal()
+    if context:
+        context.log.info(f"Fetching data from database with url: {INF_DATABASE_URL}")
+        for key, value in os.environ.items():
+            if "POSTGRES" in key or "INF" in key:
+                context.log.info(f"Environ : {key}: {value}")
+    candles = db.query(PriceData).filter(
+        PriceData.time >= start_date,
+        PriceData.time <= end_date
+    ).all()
+    if not candles:
+        df = pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    else:
+        df = pd.DataFrame([{
+            "Date": candle.time,
+            "Open": candle.open,
+            "High": candle.high,
+            "Low": candle.low,
+            "Close": candle.close,
+            "Volume": candle.volume
+        } for candle in candles])
+    return df
 
 def get_first_directory_with_runs_folder(config, model_metadata):
     """

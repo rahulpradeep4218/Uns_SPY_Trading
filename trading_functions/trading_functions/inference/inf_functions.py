@@ -1,5 +1,3 @@
-from pyexpat import model
-from sys import version
 
 from trading_functions.training.utility import get_columns_mapping, get_all_training_features
 from trading_functions.common.logging_config import logger
@@ -281,3 +279,4 @@ def get_maximum_period(config):
             if ind['period'] > max_period:
                 max_period = ind['period']
     return max_period
+

@@ -80,7 +80,8 @@ export default function TradeSessionsTable() {
         const fetchSessionDetails = async () => {
             try{
                 console.log("Fetching session details for ID:", sess_id);
-                const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+                const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+
                 console.log("Base URL for fetching session details:", baseUrl);
                 const response = await fetch(`${baseUrl}/api/process/get_session/${sess_id}`);
                 const jsonResponse = await response.json();
@@ -169,8 +170,8 @@ export default function TradeSessionsTable() {
 
     useEffect(() => {
         const fetchData = async () => {
-            
-            const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+
+            const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
             console.log("Base Url for fetching sessions :", baseUrl);
             const fullUrl = `${baseUrl}/api/trade_sessions/?type=Simulated`;
             console.log("Fetching trade sessions from URL:", fullUrl);
@@ -201,7 +202,7 @@ export default function TradeSessionsTable() {
     }, []);
 
     const handleDelete = async (id: number) => {
-        const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+        const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
         const res = await fetch(`${baseUrl}/api/trade_sessions/${id}`, {
             method: 'DELETE'
         });
@@ -234,7 +235,7 @@ export default function TradeSessionsTable() {
             console.log("Time start :", timeRange.start);
             
             const method = currentSession.id ? 'PUT' : 'POST';
-            const baseUrl = typeof window === 'undefined' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+            const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
             console.log("Base URL for saving session:", baseUrl);
             const url = currentSession.id
                 ? `${baseUrl}/api/trade_sessions/${currentSession.id}`

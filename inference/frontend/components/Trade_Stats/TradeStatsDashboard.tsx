@@ -53,13 +53,21 @@ export default function TradeStatsDashboard() {
         //const wsProtocol = rawUrl?.startsWith('https') ? 'wss' : 'ws';
         const wsProtocol = 'wss'; // Force WebSocket Secure (wss) for all connections
         const window_url = window.location.origin.replace(/^http/, 'ws');
-        const socketUrl = isRealtime 
+        let socketUrl = '';
+        if (process.env.NEXT_PUBLIC_DEV_MODE === 'true') {
+            socketUrl = isRealtime 
+            ? `${process.env.NEXT_PUBLIC_INF_URL!.replace(/^http/, 'ws')}/api/process/ws/realtime`
+            : `${process.env.NEXT_PUBLIC_INF_URL!.replace(/^http/, 'ws')}/api/process/ws/simulation/${selected_session}`;
+        }
+        else {
+            socketUrl = isRealtime 
             ? `${window_url}/${strippedUrl}/api/process/ws/realtime`
             : `${window_url}/${strippedUrl}/api/process/ws/simulation/${selected_session}`;
-
+        }
+        console.log("WebSocket URL:", socketUrl);
         const socket = new WebSocket(socketUrl);
         setWsConnection(socket);
-
+        console.log("Going to open WebSocket connection");
         socket.onopen = () => {
             console.log("WebSocket connection established");
             setConnectionStatus('Connected');

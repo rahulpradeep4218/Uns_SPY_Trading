@@ -1,3 +1,5 @@
+from numpy import test
+from xgboost import train
 from dagster import asset, MetadataValue, MaterializeResult
 import pandas as pd
 
@@ -20,7 +22,8 @@ from trading_functions.training.ml_pipeline import (
     optimize_parameters,
     train_model,
     scale_features,
-    get_model_evaluation
+    get_model_evaluation,
+    get_data_from_db,
 )
 
 from datetime import datetime
@@ -106,6 +109,17 @@ def training_data(context, raw_data, training_config: TrainingConfig, model_meta
     # Filter data based on the provided date range
     train_data = get_filtered_data(raw_data, train_start_date_str, train_end_date_str)
     row_count = train_data.shape[0]
+    if row_count == 0:
+        context.log.info("No data found in the excel data for the specified date range, so going to search in db")
+        train_data = get_data_from_db(start_date=train_start_date_str, end_date=train_end_date_str, context=context)
+        source = "Database"
+        row_count = train_data.shape[0]
+        if row_count == 0:
+            context.log.error("No data found in the database for the specified date range.") 
+            raise ValueError("No data found in the excel or database for the specified date range.")
+        train_data['Date'] = pd.to_datetime(train_data['Date'])
+    else:
+        source = "Excel"
     parq_link = quick_save_parquet_link(
         df=train_data,
         config=conf,
@@ -120,6 +134,7 @@ def training_data(context, raw_data, training_config: TrainingConfig, model_meta
             "end_date": MetadataValue.text(train_end_date_str),
             "sample_head": MetadataValue.md(train_data.head().to_markdown()),
             "Parquet_Training_Data_Link": MetadataValue.url(parq_link),
+            "source": MetadataValue.text(source),
         }
     )
     return train_data
@@ -135,6 +150,18 @@ def test_data(context, raw_data, training_config: TrainingConfig, model_metadata
     # Filter data based on the provided date range
     test_data = get_filtered_data(raw_data, test_start_date_str, test_end_date_str)
     row_count = test_data.shape[0]
+
+    if row_count == 0:
+        context.log.info("No data found in the excel data for the specified date range, so going to search in db")
+        test_data = get_data_from_db(start_date=test_start_date_str, end_date=test_end_date_str, context=context)
+        source = "Database"
+        row_count = test_data.shape[0]
+        if row_count == 0:
+            context.log.error("No data found in the database for the specified date range.") 
+            raise ValueError("No data found in the excel or database for the specified date range.")
+        test_data['Date'] = pd.to_datetime(test_data['Date'])
+    else:
+        source = "Excel"
     parq_link = quick_save_parquet_link(
         df=test_data,
         config=conf,
@@ -149,6 +176,7 @@ def test_data(context, raw_data, training_config: TrainingConfig, model_metadata
             "end_date": MetadataValue.text(test_end_date_str),
             "sample_head": MetadataValue.md(test_data.head().to_markdown()),
             "Parquet_Test_Data_Link": MetadataValue.url(parq_link),
+            "source": MetadataValue.text(source),
         }
     )
     return test_data

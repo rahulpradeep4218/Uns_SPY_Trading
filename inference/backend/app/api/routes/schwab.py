@@ -1,12 +1,18 @@
-from urllib import response
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from app.methods.schwab_methods import (
     get_schwab_config, 
     exchange_code_for_token, 
     update_schwab_config,
-    check_schwab_connection
+    check_schwab_connection,
+    get_price_history
 )
+import pandas as pd
+from app.db.models import PriceData
+from sqlalchemy.orm import Session
+from app.db.session import SessionLocal
+from sqlalchemy.dialects.postgresql import insert
 
 router = APIRouter()
 
@@ -51,5 +57,58 @@ async def check_connection():
         schwab_config = get_schwab_config()
         connection_status = check_schwab_connection(schwab_config)
         return connection_status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-realtime")
+async def sync_realtime(symbol: str, period: int = 1):
+    """
+    Sync real-time data with the Schwab API.
+    """
+    try:
+        db: Session = SessionLocal()
+        schwab_config = get_schwab_config()
+        access_token = schwab_config.get("access_token")
+        connection_status = check_schwab_connection(schwab_config)
+        if connection_status.get("status", "") != "SUCCESS":
+            message = connection_status.get("message", "")
+            raise HTTPException(status_code=500, detail=f"Not able to connect to schwab API, message : {message}")
+        data_res = get_price_history(
+            symbol=symbol,
+            access_token=access_token,
+            schwab_config=schwab_config,
+            period=period,
+            frequency=1,
+            frequency_type="minute",
+            use_period=True
+        )
+        data = data_res.json()
+        df = pd.DataFrame(data['candles'])
+        df['time'] = (
+            pd.to_datetime(df['datetime'], unit="ms", utc=True)
+            .dt.tz_convert("America/New_York")
+            .dt.strftime("%Y-%m-%d %H:%M:%S")
+        )
+        df['time'] = pd.to_datetime(df['time'], format="%Y-%m-%d %H:%M:%S")
+
+        rows = [
+            {
+                'symbol': symbol,
+                'time': row['time'],
+                'open': row['open'],
+                'high': row['high'],
+                'low': row['low'],
+                'close': row['close'],
+                'volume': row['volume']
+            }
+            for _, row in df.iterrows()
+        ]
+        stmt = insert(PriceData).values(rows)
+        stmt = stmt.on_conflict_do_nothing(index_elements=['symbol', 'time'])
+
+        db.execute(stmt)
+        db.commit()
+        return {"status": "success", "message": "Data synced successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

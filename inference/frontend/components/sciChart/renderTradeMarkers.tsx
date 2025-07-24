@@ -9,10 +9,12 @@ import {
     ELabelPlacement,
     NumberRange,
     AnnotationHoverModifier,
+    sciChartConfig,
 } from "scichart";
 
 import { TradeRecord } from "@/app/types";
 import { get } from "lodash";
+import { info } from "console";
 
 
 
@@ -130,11 +132,49 @@ export function renderTradeMarkers(
                     fontSize: 12,
                     formattedValue: (trade.calc_take_profit).toFixed(2),
                 });
-                
+
+                const signal = trade.signal;
+                const buy_take = trade.buy_take_profit;
+                const sell_take = trade.sell_take_profit;
+                const buy_stop = trade.buy_stop_loss;
+                const sell_stop = trade.sell_stop_loss;
+
+                const buy_diff = buy_take - price;
+                const sell_diff = price - sell_take;
+
+                const buy_risk = price - buy_stop;
+                const sell_risk = sell_stop - price;
+
+                const buy_risk_ratio = buy_diff != 0 ? buy_risk / buy_diff : 0;
+                const sell_risk_ratio = sell_diff != 0 ? sell_risk / sell_diff : 0;
+
+                const sell_buy_ratio = buy_diff != 0 ? sell_diff / buy_diff : 0;
+                const buy_sell_ratio = sell_diff != 0 ? buy_diff / sell_diff : 0;
+
+                const bs_ratio = signal === 1 ? buy_sell_ratio : sell_buy_ratio;
+                const bs_risk = signal === 1 ? buy_risk_ratio : sell_risk_ratio;
+
+                const infoBox = new CustomAnnotation({
+                    x1: timeMs,
+                    y1: price,
+                    xCoordinateMode: ECoordinateMode.DataValue,
+                    yCoordinateMode: ECoordinateMode.DataValue,
+                    verticalAnchorPoint: EVerticalAnchorPoint.Bottom,
+                    horizontalAnchorPoint: EHorizontalAnchorPoint.Right,
+                    svgString: `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="140" height="50">
+                            <rect width="140" height="50" fill="rgba(0,0,0,0.6)" rx="8" />
+                            <text x="10" y="20" fill="white" font-size="12">BS Ratio: ${bs_ratio.toFixed(2)}</text>
+                            <text x="10" y="38" fill="white" font-size="12">Risk Ratio: ${bs_risk.toFixed(2)}</text>
+                        </svg>
+                        `,
+                });
+
                 SciChartSurface.annotations.add(slBox);
                 SciChartSurface.annotations.add(tpBox);
                 SciChartSurface.annotations.add(slLabel);
                 SciChartSurface.annotations.add(tpLabel);
+                SciChartSurface.annotations.add(infoBox);
 
                 const yMin = Math.min(slY1, slY2, tpY1, tpY2);
                 const yMax = Math.max(slY1, slY2, tpY1, tpY2);
@@ -145,12 +185,14 @@ export function renderTradeMarkers(
                     yAxis.visibleRange = new NumberRange(yMin - pad, yMax + pad);
                 }
 
+                (marker as any)["_extraAnnotations"] = [slBox, tpBox, slLabel, tpLabel, infoBox];
 
-            } else if (!args?.isHovered) {
-                if (slBox) SciChartSurface.annotations.remove(slBox);
-                if (tpBox) SciChartSurface.annotations.remove(tpBox);
-                if (slLabel) SciChartSurface.annotations.remove(slLabel);
-                if (tpLabel) SciChartSurface.annotations.remove(tpLabel);
+
+            } else if (!args?.isHovered && (marker as any)["_extraAnnotations"]) {
+                for (const ann of (marker as any)["_extraAnnotations"]) {
+                    SciChartSurface.annotations.remove(ann);
+                }
+                (marker as any)["_extraAnnotations"] = [];
                 slBox = tpBox = slLabel = tpLabel = undefined;
             }
         });
