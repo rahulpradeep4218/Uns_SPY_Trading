@@ -145,14 +145,34 @@ export function renderTradeMarkers(
                 const buy_risk = price - buy_stop;
                 const sell_risk = sell_stop - price;
 
-                const buy_risk_ratio = buy_diff != 0 ? buy_risk / buy_diff : 0;
-                const sell_risk_ratio = sell_diff != 0 ? sell_risk / sell_diff : 0;
+                // ✅ Risk ratios (unchanged)
+                const buy_risk_ratio = buy_diff !== 0 ? buy_risk / buy_diff : 0;
+                const sell_risk_ratio = sell_diff !== 0 ? sell_risk / sell_diff : 0;
 
-                const sell_buy_ratio = buy_diff != 0 ? sell_diff / buy_diff : 0;
-                const buy_sell_ratio = sell_diff != 0 ? buy_diff / sell_diff : 0;
+                // ✅ Sell/Buy Ratio (bearish boost + denominator smoothing)
+                let sell_buy_ratio;
+                if (buy_diff < 0) {
+                // Bearish case: buy TP is below current price -> boost SELL
+                sell_buy_ratio = (Math.abs(buy_diff) + 1) * sell_diff;
+                } else {
+                // Normal case: smooth denominator by adding +1
+                sell_buy_ratio = buy_diff !== 0 ? sell_diff / (buy_diff + 1) : 0;
+                }
 
+                // ✅ Buy/Sell Ratio (bullish boost + denominator smoothing)
+                let buy_sell_ratio;
+                if (sell_diff < 0) {
+                // Bullish case: sell TP is above current price -> boost BUY
+                buy_sell_ratio = (Math.abs(sell_diff) + 1) * buy_diff;
+                } else {
+                // Normal case: smooth denominator by adding +1
+                buy_sell_ratio = sell_diff !== 0 ? buy_diff / (sell_diff + 1) : 0;
+                }
+
+                // ✅ Select ratio & risk based on trade direction (1 = buy signal, else sell)
                 const bs_ratio = signal === 1 ? buy_sell_ratio : sell_buy_ratio;
                 const bs_risk = signal === 1 ? buy_risk_ratio : sell_risk_ratio;
+
 
                 const infoBox = new CustomAnnotation({
                     x1: timeMs,
