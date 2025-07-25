@@ -80,6 +80,7 @@ export function renderTradeMarkers(
         let tpBox: BoxAnnotation | undefined;
         let slLabel: AxisMarkerAnnotation | undefined;
         let tpLabel: AxisMarkerAnnotation | undefined;
+        let entryLabel: AxisMarkerAnnotation | undefined;
         
         marker.hovered.subscribe((args) => {
             if (args?.isHovered && !slBox && !tpBox) {
@@ -124,6 +125,16 @@ export function renderTradeMarkers(
                     fontSize: 12,
                     formattedValue: (trade.calc_stop_loss).toFixed(2),
                 })
+
+                entryLabel = new AxisMarkerAnnotation({
+                    y1: trade.entry_price,
+                    backgroundColor: "rgba(6, 156, 183, 0.94)",
+                    color: "white",
+                    fontSize: 12,
+                    formattedValue: (trade.entry_price).toFixed(2),
+                });
+
+
 
                 tpLabel = new AxisMarkerAnnotation({
                     y1: trade.calc_take_profit,
@@ -194,6 +205,7 @@ export function renderTradeMarkers(
                 SciChartSurface.annotations.add(tpBox);
                 SciChartSurface.annotations.add(slLabel);
                 SciChartSurface.annotations.add(tpLabel);
+                SciChartSurface.annotations.add(entryLabel);
                 SciChartSurface.annotations.add(infoBox);
 
                 const yMin = Math.min(slY1, slY2, tpY1, tpY2);
@@ -213,7 +225,7 @@ export function renderTradeMarkers(
                     SciChartSurface.annotations.remove(ann);
                 }
                 (marker as any)["_extraAnnotations"] = [];
-                slBox = tpBox = slLabel = tpLabel = undefined;
+                slBox = tpBox = slLabel = tpLabel = entryLabel = undefined;
             }
         });
         
