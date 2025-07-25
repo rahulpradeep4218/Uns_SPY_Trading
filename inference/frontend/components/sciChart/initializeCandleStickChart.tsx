@@ -73,6 +73,7 @@ const deleteOnClick = (args: AnnotationClickEventArgs) => {
 
 registerFunction(EBaseType.OptionFunction, "deleteOnClick", deleteOnClick);
 
+/*
 function optimalDataPointWidth(xVal: number[]){
     const xMin = xVal[0]
     const xMax = xVal[xVal.length - 1];
@@ -84,6 +85,33 @@ function optimalDataPointWidth(xVal: number[]){
     console.log("Calculated dataPointWidth:", returnVal);
     return returnVal;
 }
+    */
+
+function optimalDataPointWidth(xVal: number[]) {
+    if (xVal.length < 2) return 0.5; //default fallback
+
+    // calculate average spacing between candles
+    const totalSpacing = xVal[xVal.length - 1] - xVal[0];
+    const avgSpacing = totalSpacing / (xVal.length - 1);
+    
+    //decide width of candle as percentage of spacing 0.6 - 60% of gap between candles
+    let width = 0.6;
+
+    //adjust width for large datasets
+    if (xVal.length > 1000) {
+        width = 0.5;
+    }
+
+    if (xVal.length > 10000) {
+        width = 0.4;
+    }
+    if (xVal.length > 30000) {
+        width = 0.3;
+    }
+    return width;
+}
+
+
 export const initializeCandleStickChart = async (
     divElementId: string | HTMLDivElement,
     candleDataSeriesRef: React.RefObject<OhlcDataSeries | null>
