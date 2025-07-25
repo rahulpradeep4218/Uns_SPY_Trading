@@ -241,6 +241,7 @@ def sync_realtime_price_history(
     df['time'] = pd.to_datetime(df['time'], format="%Y-%m-%d %H:%M:%S")
     first_record_time = df['time'].iloc[0]
     logger.info(f"First record time for {symbol} is {first_record_time}")
+    logger.info(f"Last record time for {symbol} is {df['time'].iloc[-1]}")
     #print("Number of rows fetched:", len(df))
     #print(df.tail())
 

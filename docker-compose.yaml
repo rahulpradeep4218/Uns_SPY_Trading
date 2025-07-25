@@ -53,6 +53,7 @@ services:
     container_name: streamlit_app
     environment:
       CONFIG_CONTAINER_PATH: ${CONFIG_CONTAINER_PATH}
+      BACKEND_HOST: http://inf_backend:${INFERENCE_BACKEND_PORT}
     image: streamlit_app_image
     expose:
       - "8501"
@@ -197,6 +198,7 @@ services:
       DATA_CONTAINER_PATH: ${DATA_CONTAINER_PATH}
       DAGSTER_CODE_LOCATION: ${DAGSTER_CODE_LOCATION}
       DAGSTER_TRADING_FUNCTIONS_PATH: ${DAGSTER_TRADING_FUNCTIONS_PATH}
+      INF_POSTGRES_DB: ${INF_POSTGRES_DB}
     networks:
       - app_network
     volumes:
@@ -227,6 +229,7 @@ services:
       LOCAL_ARTIFACTS_BASE_DIR: ${DAGSTER_FILES_CONTAINER_DIRECTORY}/artifacts
       COMPUTE_LOGS_BASE_DIR: ${DAGSTER_FILES_CONTAINER_DIRECTORY}/compute_logs
       CONFIG_CONTAINER_PATH: ${CONFIG_CONTAINER_PATH}
+      INF_POSTGRES_DB: ${INF_POSTGRES_DB}
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -265,6 +268,7 @@ services:
       LOCAL_ARTIFACTS_BASE_DIR: ${DAGSTER_FILES_CONTAINER_DIRECTORY}/artifacts
       COMPUTE_LOGS_BASE_DIR: ${DAGSTER_FILES_CONTAINER_DIRECTORY}/compute_logs
       CONFIG_CONTAINER_PATH: ${CONFIG_CONTAINER_PATH}
+      INF_POSTGRES_DB: ${INF_POSTGRES_DB}
       
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
