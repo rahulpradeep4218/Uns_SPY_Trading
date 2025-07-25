@@ -217,7 +217,7 @@ export function renderTradeMarkers(
                     yAxis.visibleRange = new NumberRange(yMin - pad, yMax + pad);
                 }
 
-                (marker as any)["_extraAnnotations"] = [slBox, tpBox, slLabel, tpLabel, infoBox];
+                (marker as any)["_extraAnnotations"] = [slBox, tpBox, slLabel, tpLabel, entryLabel, infoBox];
 
 
             } else if (!args?.isHovered && (marker as any)["_extraAnnotations"]) {
