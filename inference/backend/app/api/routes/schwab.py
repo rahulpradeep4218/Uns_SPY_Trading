@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from app.methods.schwab_methods import (
@@ -62,7 +61,7 @@ async def check_connection():
 
 
 @router.post("/sync-realtime")
-async def sync_realtime(symbol: str, period: int = 1):
+async def sync_realtime(symbol: str, period: int = 1, use_period: bool = True, start_time: str = None):
     """
     Sync real-time data with the Schwab API.
     """
@@ -81,7 +80,8 @@ async def sync_realtime(symbol: str, period: int = 1):
             period=period,
             frequency=1,
             frequency_type="minute",
-            use_period=True
+            use_period=use_period,
+            start_date_time=start_time
         )
         data = data_res.json()
         df = pd.DataFrame(data['candles'])

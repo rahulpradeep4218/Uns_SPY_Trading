@@ -1,5 +1,5 @@
 [server]
 port = 8501
-enableCORS = True
-headless = True
-allowWebsocketOrigin = rahulpradeep.com
+enableCORS = true
+headless = true
+corsAllowedOrigins = ["https://rahulpradeep.com"]

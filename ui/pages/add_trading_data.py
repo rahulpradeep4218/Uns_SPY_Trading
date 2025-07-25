@@ -3,6 +3,7 @@
 import os
 import streamlit as st
 import requests
+from datetime import datetime
 
 st.set_page_config(page_title="Sync Schwab Data", layout="centered")
 
@@ -12,7 +13,14 @@ st.title("📈 Sync Schwab Realtime Data")
 st.subheader("🔄 Sync Realtime Price Data from Schwab")
 
 symbol_realtime = st.text_input("Symbol (Realtime)", value="SPY")
-period = st.number_input("Period (in days)", min_value=1, value=1)
+
+use_period = st.checkbox("📆 Use Period Instead of Dates", value=False)
+if use_period:
+    period = st.number_input("Period (in days)", min_value=1, value=1)
+else:
+    period = 1
+    start_time = st.text_input("Start Time (ISO format)", value="2020-01-01T00:00:00")
+    end_time = st.text_input("End Time (ISO format)", value=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
 
 if st.button("📡 Sync Realtime Data"):
     try:
@@ -23,7 +31,12 @@ if st.button("📡 Sync Realtime Data"):
             print(f"Sending request to: {complete_url} with symbol={symbol_realtime} and period={period}")
             response = requests.post(
                 complete_url,
-                params={"symbol": symbol_realtime, "period": period}
+                params={
+                    "symbol": symbol_realtime, 
+                    "period": period,
+                    "use_period": use_period,
+                    "start_time": start_time if not use_period else None
+                    }
             )
             if response.status_code == 200:
                 st.success(response.json().get("message", "Data synced successfully!"))
