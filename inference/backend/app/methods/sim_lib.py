@@ -98,12 +98,27 @@ async def get_prediction_for_candle(
     buy_risk = current_close - buy_stop
     sell_risk = sell_stop - current_close
 
+    # --- Risk Ratios (unchanged logic, just safe divide) ---
     buy_risk_ratio = buy_risk / buy_diff if buy_diff != 0 else 0
     sell_risk_ratio = sell_risk / sell_diff if sell_diff != 0 else 0
 
-    sell_buy_ratio = sell_diff / buy_diff if buy_diff != 0 else 0
-    buy_sell_ratio = buy_diff / sell_diff if sell_diff != 0 else 0
+    # --- Sell/Buy Ratio with bearish boost & denominator smoothing ---
+    if buy_diff < 0:
+        # If buy TP is below price (bearish), boost sell signal
+        sell_buy_ratio = (abs(buy_diff) + 1) * sell_diff
+    else:
+        # Otherwise, calculate normally but smooth denominator with +1
+        sell_buy_ratio = sell_diff / (buy_diff + 1) if buy_diff != 0 else 0
 
+    # --- Buy/Sell Ratio with bullish boost & denominator smoothing ---
+    if sell_diff < 0:
+        # If sell TP is above price (bullish), boost buy signal
+        buy_sell_ratio = (abs(sell_diff) + 1) * buy_diff
+    else:
+        # Otherwise, calculate normally but smooth denominator with +1
+        buy_sell_ratio = buy_diff / (sell_diff + 1) if sell_diff != 0 else 0
+
+    # --- Final Signals ---
     buy_signal = buy_sell_ratio > sell_or_buy_threshold and buy_risk_ratio < risk_threshold
     sell_signal = sell_buy_ratio > sell_or_buy_threshold and sell_risk_ratio < risk_threshold
 
