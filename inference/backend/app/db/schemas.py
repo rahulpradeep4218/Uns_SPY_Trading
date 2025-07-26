@@ -90,9 +90,9 @@ class CoverageResponse(BaseModel):
 class SimulationOptions(BaseModel):
     close_at_eod: bool = True
     max_hold_time: int = 120  # in minutes
-    sl_type: Literal["percent", "abs", "model"] = "percent"  # "percent" or absolute or model"
+    sl_type: Literal["percent", "abs", "model", "atr"] = "percent"  # "percent" or absolute or model"
     sl_value: float = 0.02  # 2% stop loss
-    tp_type: Literal["percent", "abs", "model"] = "abs"  # "percent" or absolute or model
+    tp_type: Literal["percent", "abs", "model", "atr"] = "abs"  # "percent" or absolute or model
     tp_value: float = 2.0  # 5% take profit
     max_gap_days_allowed: int = 4  # Maximum gap in days allowed between current candle and last lagging candle
     sell_or_buy_threshold: float = 3

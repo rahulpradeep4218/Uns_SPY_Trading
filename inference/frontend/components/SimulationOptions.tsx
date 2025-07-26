@@ -300,6 +300,7 @@ export const SimulationOptionsForm= () => {
                             <MenuItem value="percent">%</MenuItem>
                             <MenuItem value="abs">$</MenuItem>
                             <MenuItem value="model">Model</MenuItem>
+                            <MenuItem value="atr">ATR</MenuItem>
                         </Select>
                     </FormControl>
 
@@ -334,6 +335,7 @@ export const SimulationOptionsForm= () => {
                         >
                             <MenuItem value="abs">$</MenuItem>
                             <MenuItem value="model">Model</MenuItem>
+                            <MenuItem value="atr">ATR</MenuItem>
                         </Select>
                     </FormControl>
 

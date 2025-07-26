@@ -42,9 +42,9 @@ export interface TradeStats {
 export interface SimulationOptions {
     close_at_eod?: boolean;
     max_hold_time?: number;
-    sl_type?: "percent" | "abs" | "model";
+    sl_type?: "percent" | "abs" | "model" | "atr"; // "percent" or absolute or model or atr
     sl_value?: number;
-    tp_type?: "abs" | "model";
+    tp_type?: "abs" | "model" | "atr";
     tp_value?: number;
     max_gap_days_allowed?: number;
     sell_or_buy_threshold?: number;

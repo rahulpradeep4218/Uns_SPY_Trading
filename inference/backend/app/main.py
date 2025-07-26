@@ -23,6 +23,7 @@ origins = [
     "http://localhost:6202",
     "http://localhost:8501",
     "http://streamlit:8501",
+    "http://inf_frontend:6202"
 ]
 app.add_middleware(
     CORSMiddleware,

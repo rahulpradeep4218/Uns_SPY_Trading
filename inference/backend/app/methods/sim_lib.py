@@ -134,6 +134,29 @@ async def get_prediction_for_candle(
         "current_close": current_close,
     }
 
+def calculate_atr(db: Session, symbol: str, atr_period: int, current_candle: PriceData):
+    candles = (
+        db.query(PriceData).filter(
+        PriceData.symbol == symbol,
+        PriceData.time <= current_candle.time
+        ).order_by(desc(PriceData.time)
+        ).limit(atr_period + 1).all()
+    )
+
+    if len(candles) < 2:
+        return None
+    
+    candles = list(reversed(candles))  # Reverse to have oldest first
+    trs = []
+    for i in range(1, len(candles)):
+        high = candles[i].high
+        low = candles[i].low
+        prev_close = candles[i - 1].close
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        trs.append(tr)
+
+    atr = sum(trs[-atr_period:]) / atr_period if len(trs) >= atr_period else None
+    return atr
 
 async def create_trade_for_candle(
     db: Session,
@@ -180,11 +203,23 @@ async def create_trade_for_candle(
         status = "SIGNAL"
         entry_price = None
     if status != "SIGNAL":
+        if SimulationOptions.sl_type == "atr" or SimulationOptions.tp_type == "atr":
+            atr_period = inf_config.get("inference").get("atr", {}).get("period", 0)
+            atr_value = calculate_atr(
+                db=db,
+                symbol=session.symbol,
+                atr_period=atr_period,
+                current_candle=current_candle
+            )
+
         # Calculate calc_stop_loss
         if SimulationOptions.sl_type == "abs" and SimulationOptions.sl_value is not None:
             calc_stop_loss = entry_price - SimulationOptions.sl_value if signal == 1 else entry_price + SimulationOptions.sl_value
         elif SimulationOptions.sl_type == "percent" and SimulationOptions.sl_value is not None:
             calc_stop_loss = entry_price - ((buy_take - entry_price) * SimulationOptions.sl_value) if signal == 1 else entry_price + ((entry_price - sell_take) * SimulationOptions.sl_value)
+        elif SimulationOptions.sl_type == "atr" and atr_value is not None:
+            sl_multiplier = inf_config.get("inference").get("atr", {}).get("sl_multiplier", 1.5)
+            calc_stop_loss = entry_price - (atr_value * sl_multiplier) if signal == 1 else entry_price + (atr_value * sl_multiplier)
         else:
             calc_stop_loss = sell_stop if signal == -1 else buy_stop
 
@@ -192,6 +227,9 @@ async def create_trade_for_candle(
         if SimulationOptions.tp_type == "abs" and SimulationOptions.tp_value is not None:
             logger.info(f"Using fixed TP value : {SimulationOptions.tp_value}, signal: {signal}")
             calc_take_profit = entry_price + SimulationOptions.tp_value if signal == 1 else entry_price - SimulationOptions.tp_value
+        elif SimulationOptions.tp_type == "atr" and atr_value is not None:
+            tp_multiplier = inf_config.get("inference").get("atr", {}).get("tp_multiplier", 2.5)
+            calc_take_profit = entry_price + (atr_value * tp_multiplier) if signal == 1 else entry_price - (atr_value * tp_multiplier)
         else:
             logger.info(f"Using dynamic TP values, buy_take: {buy_take}, sell_take: {sell_take}, signal: {signal}")
             calc_take_profit = buy_take if signal == 1 else sell_take
