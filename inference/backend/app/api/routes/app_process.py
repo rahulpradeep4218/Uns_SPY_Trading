@@ -1,12 +1,11 @@
 
-from venv import logger
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy import alias
 from sqlalchemy.orm import Session
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 
@@ -24,6 +23,7 @@ from app.methods.sim_lib import run_simulation_one_candle, run_realtime_one_cand
 from app.methods.schwab_methods import get_price_history, sync_realtime_price_history
 import time
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ load_dotenv()
 
 router = APIRouter()
 
+MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
 def serialize_candle(candle):
     return {
@@ -76,6 +77,66 @@ def get_data_for_model_inference(session_record: TradeSession):
         model_version=model_low_version
     )
     return scalers, training_config, model_high, model_low , inf_config
+
+
+def generate_tos_order(trade: TradeRecord):
+    inf_config = get_inf_config()
+    tos_cfg = inf_config['inference']['tos']
+    position_size = tos_cfg.get('position_size')
+    manual_exp = tos_cfg.get('exp_date_manual', None)
+    if manual_exp:
+        exp_date = datetime.strptime(manual_exp, "%Y-%m-%d")
+    else:
+        days_to_add = tos_cfg.get('exp_days_increment')
+        exp_date = datetime.now() + timedelta(days=days_to_add)
+
+    exp_month = MONTHS[exp_date.month - 1]
+    exp_day = exp_date.day
+    exp_year = exp_date.strftime('%y') # 2 digit year
+
+    strike_increment = tos_cfg.get('strike_otm_increment')
+    base_price = trade.entry_price
+
+    if trade.signal == 1:  # Buy signal
+        strike_price = math.ceil(base_price + strike_increment)
+        take_profit_op = "AT OR ABOVE"
+        stop_loss_op = "AT OR BELOW"
+        option_type = 'CALL'
+    else:  # Sell signal
+        strike_price = math.floor(base_price - strike_increment)
+        take_profit_op = "AT OR BELOW"
+        stop_loss_op = "AT OR ABOVE"
+        option_type = 'PUT'
+    strike_price = int(strike_price)
+
+    take_profit = trade.calc_take_profit if trade.calc_take_profit else None
+    stop_loss = trade.calc_stop_loss if trade.calc_stop_loss else None
+
+
+    tos_order_code = (
+        f"BUY  +{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} @ MARKET OCO\n"
+        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} @ MARKET OCO CANCEL IF SPY MARK {take_profit_op} {take_profit:.2f}\n"
+        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} @ MARKET OCO CANCEL IF SPY MARK {stop_loss_op} {stop_loss:.2f}"
+    )
+    
+    return tos_order_code
+
+
+@router.get("/get-tos-order")
+def get_tos_order(session_id: int, trade_time: str, db: Session = Depends(get_db)):
+    """
+    Get TOS order for a given session ID.
+    """
+    trade_record = db.query(TradeRecord).filter(
+        TradeRecord.session_id == session_id,
+        TradeRecord.trade_time == datetime.fromisoformat(trade_time)
+    ).first()
+    if not trade_record:
+        return JSONResponse(content={"error": "Trade record not found"}, status_code=404)
+    else:
+        tos_order_code = generate_tos_order(trade_record)
+        return JSONResponse(content={"tos_order_code": tos_order_code}, status_code=200)
+
 
 @router.get("/get_simulation_options")
 async def get_simulation_options(type: str = "simulation"):
