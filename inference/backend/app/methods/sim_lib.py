@@ -119,8 +119,8 @@ async def get_prediction_for_candle(
         buy_sell_ratio = buy_diff / (sell_diff + 1) if sell_diff != 0 else 0
 
     # --- Final Signals ---
-    buy_signal = buy_sell_ratio > sell_or_buy_threshold and buy_risk_ratio < risk_threshold
-    sell_signal = sell_buy_ratio > sell_or_buy_threshold and sell_risk_ratio < risk_threshold
+    buy_signal = buy_sell_ratio > sell_or_buy_threshold and buy_sell_ratio > sell_buy_ratio and buy_risk_ratio < risk_threshold
+    sell_signal = sell_buy_ratio > sell_or_buy_threshold and sell_buy_ratio > buy_sell_ratio and sell_risk_ratio < risk_threshold
 
     signal = 1 if buy_signal else -1 if sell_signal else 0
 

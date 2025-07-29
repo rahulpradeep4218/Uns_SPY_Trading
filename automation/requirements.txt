@@ -5,3 +5,4 @@ pyperclip
 pyautogui
 pillow
 opencv-python
+keyboard

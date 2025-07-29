@@ -43,9 +43,9 @@ def tos_order():
     for order in orders:
         print(f"Processing order: {order}")
         pyperclip.copy(order)
-        time.sleep(0.5)
-        press_clipboard_button()
         time.sleep(1.5)
+        press_clipboard_button()
+        time.sleep(1.0)
 
     return {"status": "success", "message": f"Order pasted successfully : {order_text}"}
 
