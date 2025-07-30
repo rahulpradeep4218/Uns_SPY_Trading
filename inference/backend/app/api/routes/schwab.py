@@ -1,3 +1,4 @@
+from multiprocessing import connection
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from app.methods.schwab_methods import (
@@ -5,7 +6,8 @@ from app.methods.schwab_methods import (
     exchange_code_for_token, 
     update_schwab_config,
     check_schwab_connection,
-    get_price_history
+    get_price_history,
+    get_realtime_quote
 )
 import pandas as pd
 from app.db.models import PriceData
@@ -59,6 +61,26 @@ async def check_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/get-realtime-quote")
+async def get_realtime_quote(symbol: str):
+    """
+    Get the real-time quote for a specific symbol.
+    """
+    try:
+        schwab_config = get_schwab_config()
+        connection_status = check_schwab_connection(schwab_config)
+        if connection_status.get("status", "") != "SUCCESS":
+            message = connection_status.get("message", "")
+            raise HTTPException(status_code=500, detail=f"Not able to connect to Schwab API, message: {message}")
+        schwab_config = get_schwab_config()
+        res = get_realtime_quote(
+            symbol=symbol,
+            schwab_config=schwab_config
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/sync-realtime")
 async def sync_realtime(symbol: str, period: int = 1, use_period: bool = True, start_time: str = None):

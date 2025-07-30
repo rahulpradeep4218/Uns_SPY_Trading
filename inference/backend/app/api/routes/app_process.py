@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from matplotlib.pyplot import hist
 from sqlalchemy import alias
 from sqlalchemy.orm import Session
 import asyncio
@@ -20,7 +21,7 @@ from trading_functions.inference.inf_functions import (
 import os
 from app.methods.sim_lib import run_simulation_one_candle, run_realtime_one_candle, check_trade_exit
 
-from app.methods.schwab_methods import get_price_history, sync_realtime_price_history
+from app.methods.schwab_methods import get_price_history, sync_realtime_price_history, get_realtime_quote
 import time
 import logging
 import math
@@ -118,7 +119,7 @@ def generate_tos_order(trade: TradeRecord):
         f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} MKT OCO CANCEL IF SPY MARK {take_profit_op} {take_profit:.2f}\n"
         f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} MKT OCO CANCEL IF SPY MARK {stop_loss_op} {stop_loss:.2f}"
     )
-    
+
     return tos_order_code
 
 
@@ -246,7 +247,7 @@ async def websocket_simulation(
         logger.info(f"Received simulation options: {sim_options.model_dump()}")
         
 
-        speed = min(sim_options.speed, 20.0)  # Cap speed to a maximum of 20x
+        speed = min(sim_options.speed, 100.0)  # Cap speed to a maximum of 100x
         logger.info(f"Speed delay : {1.0 / speed}")
         session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
         if not session_record:
@@ -297,11 +298,11 @@ async def websocket_simulation(
                 inf_config=inf_config
             )
 
-            candles_till_now = db.query(PriceData).filter(
-                PriceData.symbol == session_record.symbol,
-                PriceData.time <= current_candle.time,
-                PriceData.time >= session_record.trade_start
-            ).all()
+            # candles_till_now = db.query(PriceData).filter(
+            #     PriceData.symbol == session_record.symbol,
+            #     PriceData.time <= current_candle.time,
+            #     PriceData.time >= session_record.trade_start
+            # ).all()
             trade_signals_till_now = db.query(TradeRecord).filter(
                 TradeRecord.session_id == session_id,
                 TradeRecord.trade_time <= current_candle.time,
@@ -309,11 +310,11 @@ async def websocket_simulation(
             ).all()
             trade_signals_till_now_count = len(trade_signals_till_now)
             progress = trade_signals_till_now_count / len(all_candles) * 100 if all_candles else 0
-            candles_list = [can for can in candles_till_now]
-            candle_table = jsonable_encoder(candles_list)
+            #candles_list = [can for can in candles_till_now]
+            #candle_table = jsonable_encoder(candles_list)
             await websocket.send_json({
                 "type": "candle_data",
-                "data": candle_table
+                "data": [serialize_candle(current_candle)]
             })
 
             all_trades, trade_stats = get_trade_and_trade_stats(
@@ -350,7 +351,8 @@ async def websocket_realtime(
     session_id = 0
     await websocket.accept()
     try:
-        last_sync_time = 0
+        last_history_sync_time = 0
+        last_realtime_sync_time = 0
         logger.info("Waiting for initial data from client...")
         initial_data = await websocket.receive_json()
         logger.info("Session id : %d", session_id)
@@ -370,27 +372,40 @@ async def websocket_realtime(
             session_record.symbol,
             inf_config['inference']['schwab']
         ) 
-        sync_frequency = inf_config['inference']['schwab'].get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
-        logger.info(f"Sync frequency set to {sync_frequency} seconds")
-        candles_query = db.query(PriceData).filter(
-            PriceData.symbol == session_record.symbol,
-            PriceData.time >= first_record_time
-        ).order_by(PriceData.time.desc())
-        
-        candles = candles_query.all()
-        print(f"Total candles to process: {len(candles)}")
-        
+        realtime_sync_frequency = inf_config['inference']['schwab'].get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
+        history_sync_frequency = inf_config['inference']['schwab'].get('history_schwab_sync_frequency', 60)  # Default to 60 seconds
+        logger.info(f"Realtime Sync frequency set to {realtime_sync_frequency} seconds")
+        logger.info(f"History Sync frequency set to {history_sync_frequency} seconds")
+
+
+        #print(f"Total candles to process: {len(candles)}")
+        initial_data_sent = False
         while True:
             
-            await asyncio.sleep(1.0)
+            candles_query = db.query(PriceData).filter(
+                PriceData.symbol == session_record.symbol,
+                PriceData.time >= first_record_time
+            ).order_by(PriceData.time.desc())
+            
+            candles = candles_query.all()
             for current_candle in candles:
                 # Simulate processing time based on speed factor
                 #await asyncio.sleep(1.0 / speed)
                 # Check already trade run for this candle
                 
                 now = time.time()
-                if now - last_sync_time >= sync_frequency:
-                    logger.debug(f"Syncing realtime data for session {session_id} at {current_candle.time}")
+                if now - last_realtime_sync_time >= realtime_sync_frequency:
+                    realtime_res = get_realtime_quote(
+                        symbol=session_record.symbol,
+                        schwab_config=inf_config['inference']['schwab']
+                    )
+                    await websocket.send_json({
+                            "type": "realtime_data",
+                            "data": realtime_res
+                        })
+                    last_realtime_sync_time = time.time()
+                if now - last_history_sync_time >= history_sync_frequency:
+                    logger.debug(f"Syncing history data for session {session_id} at {current_candle.time}")
                     first_record_time = sync_realtime_price_history(
                         session_record.symbol,
                         inf_config['inference']['schwab']
@@ -400,22 +415,37 @@ async def websocket_realtime(
                         TradeRecord.status == "OPEN"
                     ).all()
                     for trade in open_trades:
-                        await check_trade_exit(trade, current_candle, sim_options)
+                        if trade.trade_time < current_candle.time:
+                            await check_trade_exit(trade, current_candle, sim_options)
                     db.commit()  # Commit the changes to the database
-                    last_sync_time = time.time()
-                    logger.debug(f"Last sync time updated to {last_sync_time}")
+                    last_history_sync_time = time.time()
+                    logger.debug(f"Last history sync time updated to {last_history_sync_time}")
 
                     candle_data = db.query(PriceData).filter(
                         PriceData.symbol == session_record.symbol,
                         PriceData.time >= first_record_time,
                     ).order_by(PriceData.time.asc()).all()
                     
-                    candles_list = [can for can in candle_data]
-                    candle_table = jsonable_encoder(candles_list)
-                    await websocket.send_json({
-                        "type": "candle_data",
-                        "data": candle_table
-                    })
+                    
+                    if not initial_data_sent:
+                        candles_list = [can for can in candle_data]
+                        candle_table = jsonable_encoder(candles_list)
+                        await websocket.send_json({
+                            "type": "candle_data",
+                            "data": candle_table
+                        })
+                    else:
+                        last_candle = candle_data[-1] if candle_data else None
+                        if last_candle:
+                            await websocket.send_json({
+                                "type": "candle_data",
+                                "data": [serialize_candle(last_candle)]
+                            })
+                        
+                    initial_data_sent = True
+
+                
+
                 else:
                     trade_candle = db.query(TradeRecord).filter(
                         TradeRecord.session_id == session_id,
@@ -454,6 +484,7 @@ async def websocket_realtime(
                     "type": "trade_table",
                     "data": trade_table
                 })
+            await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         print(f"Client disconnected from session {session_id}")
 
@@ -475,9 +506,9 @@ def get_trade_and_trade_stats(db: Session, session_id: int, progress: float):
         TradeRecord.status != "SIGNAL"
     ).order_by(TradeRecord.trade_time.desc()).all()
 
-    all_trade_signals = db.query(TradeRecord).filter(
-        TradeRecord.session_id == session_id
-    ).count()
+    # all_trade_signals = db.query(TradeRecord).filter(
+    #     TradeRecord.session_id == session_id
+    # ).count()
 
     total_profit = 0.0
     win_count = 0

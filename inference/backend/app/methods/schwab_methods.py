@@ -1,5 +1,6 @@
 import base64
 from operator import index
+from shlex import quote
 import requests
 from ruamel.yaml import YAML
 from datetime import datetime
@@ -208,6 +209,38 @@ def get_price_history(
 
     return response
     #return pd.DataFrame(data['candles'])
+
+
+def get_realtime_quote(symbol: str, schwab_config: dict) -> pd.DataFrame:
+    """
+    Fetch the latest real-time quote for a given symbol.
+    Returns a DataFrame with the latest quote.
+    """
+    access_token = schwab_config.get("access_token")
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "accept": "application/json"
+    }
+    quote_url = schwab_config.get('market_data_url', '')
+    url = f"{quote_url}/quotes"
+    params = {
+        "symbols": symbol
+    }
+
+    response = requests.get(url=url, headers=headers, params=params)
+    if response.status_code != 200:
+        print(f"Error fetching real-time quote: HTTP {response.status_code}")
+        print("Response body:", response.text)
+        response.raise_for_status()
+    quote_data = response.json().get(symbol, {}).get("quote", {})
+    last_price = quote_data.get("mark")
+    time_data = quote_data.get("quoteTime")
+    return_res = {
+        "symbol": symbol,
+        "price": last_price,
+        "time": time_data
+    }
+    return return_res
 
 
 def sync_realtime_price_history(

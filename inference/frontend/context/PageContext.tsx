@@ -53,6 +53,7 @@ type PageContextType = {
     chartControlsRef: React.RefObject<TResolvedReturnType<typeof initializeCandleStickChart>["controls"] | null>;
     tradeMarkerMapRef: React.RefObject<Map<number, CustomAnnotation>>;
     candleDataSeriesRef?: React.RefObject<OhlcDataSeries | null>;
+    realtimeSeriesRef?: React.RefObject<OhlcDataSeries | null>;
 
 
     simulationRun: boolean;
@@ -103,6 +104,8 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
     const tradeMarkerMapRef = useRef<Map<number, CustomAnnotation>>(new Map());
     const candleDataSeriesRef = useRef<OhlcDataSeries | null>(null);
 
+    const realtimeSeriesRef = useRef<OhlcDataSeries | null>(null);
+
 
     const [simulationRun, setSimulationRun] = useState<boolean>(false);
 
@@ -147,6 +150,7 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
             simulationRun,
             setSimulationRun,
             candleDataSeriesRef,
+            realtimeSeriesRef,
             schwabConnStatus,
             setSchwabConnStatus,
             isRealtime,

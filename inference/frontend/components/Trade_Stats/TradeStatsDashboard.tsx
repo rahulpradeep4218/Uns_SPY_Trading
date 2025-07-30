@@ -1,6 +1,6 @@
 'use client';
 import { DateTime } from "luxon";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 import { usePageContext } from '@/context/PageContext';
 import { TradeTable } from '@/components/Trade_Stats/Trade_Records_Table';
@@ -10,6 +10,7 @@ import { Box, Grid, Typography, Button } from '@mui/material';
 import { renderTradeMarkers } from '@/components/sciChart/renderTradeMarkers';
 import { init } from "next/dist/compiled/webpack/webpack";
 import { defaultSimulationOptions } from "@/components/SimulationOptions";
+import { last } from "lodash";
 
 
 
@@ -30,9 +31,18 @@ export default function TradeStatsDashboard() {
         simulationRun, // for candle simulation
         setSimulationRun, // for candle simulation
         candleDataSeriesRef,
+        realtimeSeriesRef,
         isRealtime,
         setIsRealtime
     } = usePageContext();
+
+    const currentCandleRef = useRef<{
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    } | null>(null);
 
     const [connectionStatus, setConnectionStatus] = useState('Disconnected');
     const [isSimulationRunning, setIsSimulationRunning] = useState(false);
@@ -104,27 +114,109 @@ export default function TradeStatsDashboard() {
             }
             else if (data.type === "candle_data"){
                 const ohlcData = data.data;
-                const xValues = ohlcData.map((candle: any) => {
-                    const dt = DateTime.fromISO(candle.time, { zone: 'America/New_York' });
-                    if (!dt.isValid) {
-                        console.error("Invalid date format in candle data:", candle.time);
-                        return 0; // or handle the error as needed
-                    }
-                    return dt.toMillis();
-                });
-                const openValues = ohlcData.map((candle: any) => candle.open);
-                const highValues = ohlcData.map((candle: any) => candle.high);
-                const lowValues = ohlcData.map((candle: any) => candle.low);
-                const closeValues = ohlcData.map((candle: any) => candle.close);
 
-                candleDataSeriesRef?.current?.clear();
-                candleDataSeriesRef?.current?.appendRange(
-                    xValues,
-                    openValues,
-                    highValues,
-                    lowValues,
-                    closeValues
-                );
+                if (ohlcData.length > 1) {
+                    const xValues = ohlcData.map((candle: any) => {
+                        const dt = DateTime.fromISO(candle.time, { zone: 'America/New_York' });
+                        if (!dt.isValid) {
+                            console.error("Invalid date format in candle data:", candle.time);
+                            return 0; // or handle the error as needed
+                        }
+                        return dt.toMillis();
+                    });
+                    const openValues = ohlcData.map((candle: any) => candle.open);
+                    const highValues = ohlcData.map((candle: any) => candle.high);
+                    const lowValues = ohlcData.map((candle: any) => candle.low);
+                    const closeValues = ohlcData.map((candle: any) => candle.close);
+
+                    candleDataSeriesRef?.current?.clear();
+                    candleDataSeriesRef?.current?.appendRange(
+                        xValues,
+                        openValues,
+                        highValues,
+                        lowValues,
+                        closeValues
+                    );
+                }
+                else if (ohlcData.length === 1) {
+                    //console.log("History - Received single candle data:", ohlcData[0]);
+                    const candle = ohlcData[0];
+                    const candleTime = DateTime.fromISO(candle.time, { zone: 'America/New_York' }).toMillis();
+
+                    const dataSeries = candleDataSeriesRef?.current;
+                    if (! dataSeries)  return;
+
+                    const xValues = dataSeries.getNativeXValues();
+                    let foundIndex = -1;
+                    for (let i = dataSeries.count() - 1; i >= 0; i--) {
+                        if (xValues.get(i) === candleTime) {
+                            foundIndex = i;
+                            break;
+                        }
+                    }
+                    console.log("Price history - Found index for candle time:", foundIndex, "for time:", candleTime);
+                    if (foundIndex >= 0) {
+                        console.log("History - Updating existing candle at index:", foundIndex, "with data:", candle);
+                        dataSeries.removeAt(foundIndex);
+                        dataSeries.append(
+                            candleTime,
+                            candle.open,
+                            candle.high,
+                            candle.low,
+                            candle.close
+                        );
+                    }
+                    else{
+                        dataSeries.append(
+                            candleTime,
+                            candle.open,
+                            candle.high,
+                            candle.low,
+                            candle.close
+                        );
+                    }
+                }
+            }
+            else if (data.type === 'realtime_data') {
+                
+                const { price, time } = data.data;
+                console.log("Received realtime data:", price, "  ",  time);
+                const minuteTimestamp = Math.floor(time / 60000) * 60000 + 60000; // Round to the nearest minute
+
+                const dataseries = realtimeSeriesRef?.current;
+                if (!dataseries) return;
+                
+                dataseries?.clear();
+                if (currentCandleRef.current && currentCandleRef.current.time === minuteTimestamp) {
+                    currentCandleRef.current.high = Math.max(currentCandleRef.current.high, price);
+                    currentCandleRef.current.low = Math.min(currentCandleRef.current.low, price);
+                    currentCandleRef.current.close = price;
+                    console.log("Realtime info :", minuteTimestamp, "with price:", currentCandleRef.current);
+                    dataseries.append(
+                        minuteTimestamp,
+                        currentCandleRef.current.open,
+                        currentCandleRef.current.high,
+                        currentCandleRef.current.low,
+                        currentCandleRef.current.close
+                    );
+
+                }
+                else{
+                    currentCandleRef.current = {
+                        time: minuteTimestamp,
+                        open: price,
+                        high: price,
+                        low: price,
+                        close: price
+                    };
+                    dataseries.append(
+                        minuteTimestamp,
+                        currentCandleRef.current.open,
+                        currentCandleRef.current.high,
+                        currentCandleRef.current.low,
+                        currentCandleRef.current.close
+                    );
+                }
             }
         };
         socket.onclose = () => {

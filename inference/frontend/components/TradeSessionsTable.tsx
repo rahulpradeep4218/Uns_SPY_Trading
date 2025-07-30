@@ -128,6 +128,9 @@ export default function TradeSessionsTable() {
                 if (last_trade_signal_time) {
                     ohlcDataUrl += `?end_time=${last_trade_signal_time}`;
                 }
+                else {
+                    ohlcDataUrl += `?end_time=${session_record.trade_start}`;
+                }
                     
                 const res = await fetch(ohlcDataUrl)
                 const ohlcData = await res.json();

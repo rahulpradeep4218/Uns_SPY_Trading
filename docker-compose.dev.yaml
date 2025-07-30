@@ -5,10 +5,18 @@ services:
     build:
       context: .
       dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_streamlit
+      args:
+        DAGSTER_TRADING_FUNCTIONS_PATH: ${DAGSTER_TRADING_FUNCTIONS_PATH}
     container_name: streamlit_app
     environment:
       CONFIG_CONTAINER_PATH: ${CONFIG_CONTAINER_PATH}
       BACKEND_HOST: http://inf_backend:8000
+      DAGSTER_POSTGRES_USER: ${POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      DAGSTER_POSTGRES_HOST: ${POSTGRES_HOST}
+      INF_POSTGRES_DB: ${INF_POSTGRES_DB}
+
     image: streamlit_app_image
     ports:
       - "8501:8501"  # Expose Streamlit port

@@ -52,6 +52,7 @@ import {
     EAxisType,
     DateLabelProvider,
     DataLabelProvider,
+    EDataPointWidthMode,
 } from "scichart";
 
 import { appTheme } from "@/app/theme";
@@ -63,7 +64,6 @@ import { ExampleDataProvider } from "@/components/sciChart/ExampleDataProvider";
 import { VerticalYRulerModifier } from "@/components/sciChart/RulerModifier";
 import { OHLCDataPoint } from "@/app/types";
 
-import { usePageContext } from "@/context/PageContext";
 
 const deleteOnClick = (args: AnnotationClickEventArgs) => {
     if (args.sender.isSelected && args.mouseArgs.ctrlKey) {
@@ -87,34 +87,11 @@ function optimalDataPointWidth(xVal: number[]){
 }
     */
 
-function optimalDataPointWidth(xVal: number[]) {
-    if (xVal.length < 2) return 0.5; //default fallback
-
-    // calculate average spacing between candles
-    const totalSpacing = xVal[xVal.length - 1] - xVal[0];
-    const avgSpacing = totalSpacing / (xVal.length - 1);
-    
-    //decide width of candle as percentage of spacing 0.6 - 60% of gap between candles
-    let width = 0.6;
-
-    //adjust width for large datasets
-    if (xVal.length > 1000) {
-        width = 0.5;
-    }
-
-    if (xVal.length > 10000) {
-        width = 0.4;
-    }
-    if (xVal.length > 30000) {
-        width = 0.3;
-    }
-    return width;
-}
-
 
 export const initializeCandleStickChart = async (
     divElementId: string | HTMLDivElement,
-    candleDataSeriesRef: React.RefObject<OhlcDataSeries | null>
+    candleDataSeriesRef: React.RefObject<OhlcDataSeries | null>,
+    realtimeSeriesRef: React.RefObject<OhlcDataSeries | null>,
 ) => {
     SciChartSurface.configure({
         wasmUrl: "/trading/ui/scichart2d.wasm",
@@ -162,16 +139,43 @@ export const initializeCandleStickChart = async (
         highValues: highValues,
         lowValues: lowValues,
         closeValues: closeValues,
-        dataSeriesName: "Rahul Random Candles",
+        dataSeriesName: "Rahul9 Historic Candles",
     });
-    candleDataSeriesRef.current = candleDataSeries;      
+    candleDataSeriesRef.current = candleDataSeries; 
+    
+    
+    
+    const realtimeDataSeries = new OhlcDataSeries(wasmContext, {
+        dataSeriesName: "Rahul9 Realtime Candles",
+    });
+    realtimeSeriesRef.current = realtimeDataSeries;
+
+    const xAxis = new DateTimeNumericAxis(wasmContext, {
+        // autoRange.never as we're setting visibleRange explicitly below. If you dont do this, leave this flag default
+        autoRange: EAutoRange.Never,
+        labelFormat: ENumericFormat.Date_HHMMSS,
+        drawMajorGridLines: false,
+        drawMinorGridLines: false,
+        majorDelta: 1,
+        minorDelta: 0.2,
+        growBy: new NumberRange(0.05, 0.05),
+        labelProvider: utcProvider,
+    });
+
+    sciChartSurface.xAxes.add(xAxis);
+
+    // ✅ Set visible range to last 100 candles
+    const startIdx = Math.max(0, xValues.length - 100);
+    xAxis.visibleRange = new NumberRange(xValues[startIdx], xValues[xValues.length - 1]);
+
+
+
     const candlestickSeries = new FastCandlestickRenderableSeries(wasmContext, {
         id: "Candles",
         dataSeries: candleDataSeriesRef.current,
         //dataPointWidth: 0.005, // width of the candle
-        
-        dataPointWidth: optimalDataPointWidth(xValues), // width of the candle
-        
+        dataPointWidthMode: EDataPointWidthMode.Range,
+        dataPointWidth: 30000, // width of the candle in pixels
         stroke: appTheme.ForegroundColor, // used by cursorModifier below
         strokeThickness: 1,
         brushUp: appTheme.VividGreen + "77",
@@ -179,7 +183,22 @@ export const initializeCandleStickChart = async (
         strokeUp: appTheme.VividGreen,
         strokeDown: appTheme.MutedRed,
     });
+
+    const realtimeSeries = new FastCandlestickRenderableSeries(wasmContext, {
+        id: "Realtime Candles",
+        dataSeries: realtimeSeriesRef.current,
+        dataPointWidthMode: EDataPointWidthMode.Range,
+        dataPointWidth: 40000, // width of the candle in pixels
+        brushUp: "rgba(57, 255, 20, 0.7)",   // Neon green fill
+        brushDown: "rgba(255, 7, 58, 0.7)",  // Neon red fill
+        strokeUp: "#39FF14",   // Neon outline
+        strokeDown: "#FF073A",
+        strokeThickness: 2,
+    });
+
     sciChartSurface.renderableSeries.add(candlestickSeries);
+    sciChartSurface.renderableSeries.add(realtimeSeries);
+
 
     // Add some moving averages using SciChart's filters/transforms API
     // when candleDataSeries updates, XyMovingAverageFilter automatically recomputes
@@ -224,18 +243,8 @@ export const initializeCandleStickChart = async (
     sciChartSurface.chartModifiers.getById("marker").isEnabled = false;
     sciChartSurface.chartModifiers.getById("line").isEnabled = false;
     sciChartSurface.chartModifiers.getById("horline").isEnabled = false;
-    const xAxis = new DateTimeNumericAxis(wasmContext, {
-        // autoRange.never as we're setting visibleRange explicitly below. If you dont do this, leave this flag default
-        autoRange: EAutoRange.Never,
-        labelFormat: ENumericFormat.Date_HHMMSS,
-        drawMajorGridLines: false,
-        drawMinorGridLines: false,
-        majorDelta: 1,
-        minorDelta: 0.2,
-        growBy: new NumberRange(0.05, 0.05),
-        labelProvider: utcProvider,
-    });
-    sciChartSurface.xAxes.add(xAxis);
+    
+
 
     // Create a NumericAxis on the YAxis with 2 Decimal Places
     sciChartSurface.yAxes.add(
@@ -297,20 +306,20 @@ export const initializeCandleStickChart = async (
         }[mode] ?? 'Select a tool mode';
     };
 
-    const resetChart = () => {
-        sciChartSurface.annotations.clear(true);
-        // Zoom to the latest 100 candles
-        const startIdx = Math.max(0, xValues.length - 100);
-        const total = xValues.length;
-        xAxis.visibleRange = new NumberRange(xValues[startIdx], xValues[total - 1]);
-    };
+    // const resetChart = () => {
+    //     sciChartSurface.annotations.clear(true);
+    //     // Zoom to the latest 100 candles
+    //     const startIdx = Math.max(0, xValues.length - 100);
+    //     const total = xValues.length;
+    //     xAxis.visibleRange = new NumberRange(xValues[startIdx], xValues[total - 1]);
+    // };
 
-    resetChart();
+    // resetChart();
     setChartMode("pan");
 
     return {
         sciChartSurface,
-        controls: { getDefinition, applyDefinition, resetChart, setChartMode },
+        controls: { getDefinition, applyDefinition, setChartMode },
     };
 };    
 
