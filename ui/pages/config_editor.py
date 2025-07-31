@@ -124,6 +124,23 @@ for key, value in schwab_config.items():
     new_value = st.text_input(f"schwab_{key}", value=str(value))
     if new_value != value:
         inference_config['schwab'][key] = type(value)(new_value)
+
+st.subheader("ATR Configuration")
+atr_config = inference_config.get('atr', {})
+for key, value in atr_config.items():
+    new_value = st.text_input(f"atr_{key}", value=str(value))
+    if new_value != value:
+        inference_config['atr'][key] = type(value)(new_value)
+
+
+st.subheader("TOS Configuration")
+tos_config = inference_config.get('tos', {})
+for key, value in tos_config.items():
+    new_value = st.text_input(f"tos_{key}", value=str(value))
+    if new_value != value:
+        inference_config['tos'][key] = type(value)(new_value)
+
+
 st.subheader("Training Configuration")
 selected_indicators_ctl = st.multiselect(
     "Select Indicators",
