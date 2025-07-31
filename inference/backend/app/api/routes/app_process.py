@@ -116,8 +116,8 @@ def generate_tos_order(trade: TradeRecord):
 
     tos_order_code = (
         f"BUY  +{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} MKT OCO\n"
-        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} MKT OCO CANCEL IF SPY MARK {take_profit_op} {take_profit:.2f}\n"
-        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} MKT OCO CANCEL IF SPY MARK {stop_loss_op} {stop_loss:.2f}"
+        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} STP 999 OCO TRG BY OCO WHEN SPY MARK {take_profit_op} {take_profit:.2f}\n"
+        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} STP 999 OCO TRG BY OCO WHEN SPY MARK {stop_loss_op} {stop_loss:.2f}"
     )
 
     return tos_order_code
