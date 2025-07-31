@@ -81,11 +81,11 @@ export default function UserAnnotatedStockChart() {
     const loadChart = (event: any) => {
         const definition = savedCharts[selectedChart];
         setName(selectedChart);
-        chartControlsRef.current!.resetChart();
+        //chartControlsRef.current!.resetChart();
         chartControlsRef.current!.applyDefinition(definition);
     };
     const resetChart = (event: any) => {
-        chartControlsRef.current!.resetChart();
+        //chartControlsRef.current!.resetChart();
     };
 
     const { classes } = useStyles();
