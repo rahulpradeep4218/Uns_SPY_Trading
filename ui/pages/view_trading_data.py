@@ -109,7 +109,7 @@ def query_trades(session_id: int, sell_or_buy_threshold: float, risk_threshold: 
 st.title("📊 Trade Records Viewer")
 
 # ✅ Inputs
-session_id = st.number_input("Enter Session ID:", min_value=1, step=1)
+session_id = st.number_input("Enter Session ID:", min_value=0, step=1)
 
 sell_or_buy_threshold = st.number_input("Sell/Buy Threshold", value=1.2, step=0.1, format="%.2f")
 risk_threshold = st.number_input("Risk Threshold", value=2.0, step=0.1, format="%.2f")
