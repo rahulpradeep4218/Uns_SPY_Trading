@@ -14,6 +14,7 @@ from app.db.session import SessionLocal
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import func
 import logging
+from time import time
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +195,7 @@ def get_price_history(
     if use_period:
         params['period'] = period
         params['periodType'] = period_type
-        params['endDate'] = end_time_utc
+        params['endDate'] = int(time()*1000)  # Use current time as end time
     else:
         params["startDate"] = start_time_utc
         params["endDate"] = end_time_utc
