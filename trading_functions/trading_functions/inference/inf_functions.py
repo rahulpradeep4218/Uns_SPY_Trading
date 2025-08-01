@@ -280,3 +280,57 @@ def get_maximum_period(config):
                 max_period = ind['period']
     return max_period
 
+
+def calculate_fields(trade, price, sell_or_buy_threshold, risk_threshold):
+    """Calculates buy_diff, sell_diff, risks, ratios, and signals for one trade record."""
+    current_close = price.close if price else None
+
+    if current_close is None:
+        return None  # Skip if no price data is found
+
+    buy_take = trade.buy_take_profit or 0
+    sell_take = trade.sell_take_profit or 0
+    buy_stop = trade.buy_stop_loss or 0
+    sell_stop = trade.sell_stop_loss or 0
+
+    # --- Base calculations ---
+    buy_diff = buy_take - current_close
+    sell_diff = current_close - sell_take
+    buy_risk = current_close - buy_stop
+    sell_risk = sell_stop - current_close
+
+    # --- Ratios ---
+    buy_risk_ratio = buy_risk / buy_diff if buy_diff != 0 else 0
+    sell_risk_ratio = sell_risk / sell_diff if sell_diff != 0 else 0
+
+    # --- Sell/Buy Ratio ---
+    if buy_diff < 0:
+        sell_buy_ratio = (abs(buy_diff) + 1) * sell_diff
+    else:
+        sell_buy_ratio = sell_diff / (buy_diff + 1) if buy_diff != 0 else 0
+
+    # --- Buy/Sell Ratio ---
+    if sell_diff < 0:
+        buy_sell_ratio = (abs(sell_diff) + 1) * buy_diff
+    else:
+        buy_sell_ratio = buy_diff / (sell_diff + 1) if sell_diff != 0 else 0
+
+    # --- Signals ---
+    buy_signal = buy_sell_ratio > sell_or_buy_threshold and buy_sell_ratio > sell_buy_ratio and buy_risk_ratio < risk_threshold
+    sell_signal = sell_buy_ratio > sell_or_buy_threshold and sell_buy_ratio > buy_sell_ratio and sell_risk_ratio < risk_threshold
+    signal = 1 if buy_signal else -1 if sell_signal else 0
+
+    return {
+        "current_close": current_close,
+        "buy_diff": buy_diff,
+        "sell_diff": sell_diff,
+        "buy_risk": buy_risk,
+        "sell_risk": sell_risk,
+        "buy_risk_ratio": buy_risk_ratio,
+        "sell_risk_ratio": sell_risk_ratio,
+        "buy_sell_ratio": buy_sell_ratio,
+        "sell_buy_ratio": sell_buy_ratio,
+        "buy_signal": buy_signal,
+        "sell_signal": sell_signal,
+        "signal": signal
+    }
