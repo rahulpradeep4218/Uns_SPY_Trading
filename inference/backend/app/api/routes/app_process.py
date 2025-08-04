@@ -108,6 +108,7 @@ def generate_tos_order(trade: TradeRecord):
         take_profit_op = "AT OR BELOW"
         stop_loss_op = "AT OR ABOVE"
         option_type = 'PUT'
+    stop_dummy_price = int(tos_cfg.get('stop_dummy_price'))
     strike_price = int(strike_price)
 
     take_profit = trade.calc_take_profit if trade.calc_take_profit else None
@@ -116,8 +117,8 @@ def generate_tos_order(trade: TradeRecord):
 
     tos_order_code = (
         f"BUY  +{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} MKT OCO\n"
-        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} STP 999 OCO TRG BY OCO WHEN SPY MARK {take_profit_op} {take_profit:.2f}\n"
-        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} STP 999 OCO TRG BY OCO WHEN SPY MARK {stop_loss_op} {stop_loss:.2f}"
+        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} STP {stop_dummy_price} OCO TRG BY OCO WHEN SPY MARK {take_profit_op} {take_profit:.2f}\n"
+        f"SELL -{position_size} SPY 100 (Weeklys) {exp_day} {exp_month} {exp_year} {strike_price} {option_type} STP {stop_dummy_price} OCO TRG BY OCO WHEN SPY MARK {stop_loss_op} {stop_loss:.2f}"
     )
 
     return tos_order_code
