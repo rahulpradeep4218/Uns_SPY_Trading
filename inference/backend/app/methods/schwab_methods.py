@@ -190,7 +190,8 @@ def get_price_history(
         "symbol": symbol,
         "frequencyType": frequency_type,
         "frequency": frequency,
-        "needPreviousClose": True
+        "needPreviousClose": True,
+        "needExtendedHoursData": False
     }
     if use_period:
         params['period'] = period
