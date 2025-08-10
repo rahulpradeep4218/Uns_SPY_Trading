@@ -1,4 +1,5 @@
 from multiprocessing import connection
+from numbers import Real
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from app.methods.schwab_methods import (
@@ -7,12 +8,13 @@ from app.methods.schwab_methods import (
     update_schwab_config,
     check_schwab_connection,
     get_price_history,
-    get_realtime_quote
+    get_realtime_quote,
+    get_schwab_connection_info_from_db
 )
 import pandas as pd
-from app.db.models import PriceData
+from trading_functions.db.models import PriceData
 from sqlalchemy.orm import Session
-from app.db.session import SessionLocal
+from trading_functions.db.session import SessionLocal
 from sqlalchemy.dialects.postgresql import insert
 
 router = APIRouter()
@@ -55,26 +57,25 @@ async def check_connection():
     Check the connection to the Schwab API.
     """
     try:
-        schwab_config = get_schwab_config()
-        connection_status = check_schwab_connection(schwab_config)
-        return connection_status
+        connection_info = await get_schwab_connection_info_from_db("SPY")
+
+        return connection_info
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/get-realtime-quote")
-async def get_realtime_quote(symbol: str):
+async def get_realtime_quote_api(symbol: str):
     """
     Get the real-time quote for a specific symbol.
     """
     try:
         schwab_config = get_schwab_config()
-        connection_status = check_schwab_connection(schwab_config)
+        connection_status = await check_schwab_connection(schwab_config)
         if connection_status.get("status", "") != "SUCCESS":
             message = connection_status.get("message", "")
             raise HTTPException(status_code=500, detail=f"Not able to connect to Schwab API, message: {message}")
-        schwab_config = get_schwab_config()
-        res = get_realtime_quote(
+        res = await get_realtime_quote(
             symbol=symbol,
             schwab_config=schwab_config
         )

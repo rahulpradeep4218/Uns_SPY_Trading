@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS trade_records(
     calc_stop_loss NUMERIC(12, 4),
     calc_take_profit NUMERIC(12, 4),
     profit NUMERIC(12, 2),
-    exit_reason VARCHAR(20)
+    exit_reason VARCHAR(20),
+    realtime_trade_id VARCHAR(50)
 );
 
 CREATE TABLE IF NOT EXISTS price_data(
@@ -42,4 +43,39 @@ CREATE TABLE IF NOT EXISTS price_data(
     open NUMERIC(12, 4),
     close NUMERIC(12, 4),
     volume BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS realtime_data(
+    symbol VARCHAR(10) NOT NULL,
+    time TIMESTAMP NOT NULL,
+    open NUMERIC(12, 4),
+    high NUMERIC(12, 4),
+    low NUMERIC(12, 4),
+    price NUMERIC(12, 4),
+    realtime_last_sync_time TIMESTAMP,
+    history_last_sync_time TIMESTAMP
+);
+
+INSERT INTO realtime_data (
+    symbol,
+    time,
+    open,
+    high,
+    low,
+    price,
+    realtime_last_sync_time,
+    history_last_sync_time
+)
+
+SELECT
+    'SPY' as symbol,
+    NOW() as time,
+    634.00 as open,
+    634.00 as high,
+    634.00 as low,
+    634.00 as price,
+    NOW() as realtime_last_sync_time,
+    NOW() as history_last_sync_time
+WHERE NOT EXISTS (
+    SELECT 1 FROM realtime_data WHERE symbol = 'SPY'
 );

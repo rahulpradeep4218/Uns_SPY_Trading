@@ -61,3 +61,15 @@ class PriceData(Base):
     low: Mapped[float] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float)
     volume: Mapped[int] = mapped_column(Integer)
+
+
+class RealtimeData(Base):
+    __tablename__ = "realtime_data"
+    symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    time: Mapped[datetime] = mapped_column(DateTime)
+    open: Mapped[float] = mapped_column(Float)
+    high: Mapped[float] = mapped_column(Float)
+    low: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)
+    realtime_last_sync_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    history_last_sync_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)

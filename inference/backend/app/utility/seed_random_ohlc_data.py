@@ -1,9 +1,8 @@
 import random
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from app.db.session import SessionLocal
-from app.db.models import PriceData
-import random
+from trading_functions.db.session import SessionLocal
+from trading_functions.db.models import PriceData
 from calendar import monthrange
 
 def generate_ohlc(symbol: str, start_time: datetime, num_rows: int):

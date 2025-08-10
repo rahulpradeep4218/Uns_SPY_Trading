@@ -1,4 +1,4 @@
-from app.db.session import SessionLocal
+from trading_functions.db.session import SessionLocal
 
 def get_db():
     """

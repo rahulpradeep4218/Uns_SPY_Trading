@@ -1,18 +1,14 @@
-
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from matplotlib.pyplot import hist
-from sqlalchemy import alias
 from sqlalchemy.orm import Session
 import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
-
 from app.api.deps import get_db
-from app.db.schemas import SimulationOptions, TradeStats, TradeRecordResponse
-from app.db.models import TradeSession, PriceData, TradeRecord
+from trading_functions.db.schemas import SimulationOptions, TradeStats, TradeRecordResponse
+from trading_functions.db.models import TradeSession, PriceData, TradeRecord, RealtimeData
 import yaml
 from trading_functions.inference.inf_functions import (
     download_artifacts,
@@ -20,8 +16,6 @@ from trading_functions.inference.inf_functions import (
 )
 import os
 from app.methods.sim_lib import run_simulation_one_candle, run_realtime_one_candle, check_trade_exit
-
-from app.methods.schwab_methods import get_price_history, sync_realtime_price_history, get_realtime_quote
 import time
 import logging
 import math
@@ -340,6 +334,16 @@ async def websocket_simulation(
         print(f"Client disconnected from session {session_id}")
 
 
+def get_first_record_time_realtime(db: Session, schwab_config, session_record: TradeSession) -> datetime:
+    realtime_period_days = schwab_config.get('realtime_period_days', 1)
+    last_candle = db.query(PriceData).filter(
+        PriceData.symbol == session_record.symbol
+    ).order_by(PriceData.time.desc()).first()
+    if last_candle:
+        first_record_time = last_candle.time - timedelta(days=realtime_period_days)
+    else:
+        first_record_time = None
+    return first_record_time
 
 @router.websocket("/ws/realtime")
 async def websocket_realtime(
@@ -369,18 +373,13 @@ async def websocket_realtime(
         
         scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
         logger.info("Scalers and models loaded successfully. Running sync realtime for once before entering loop")
-        first_record_time = sync_realtime_price_history(
-            session_record.symbol,
-            inf_config['inference']['schwab']
-        ) 
-        realtime_sync_frequency = inf_config['inference']['schwab'].get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
-        history_sync_frequency = inf_config['inference']['schwab'].get('history_schwab_sync_frequency', 60)  # Default to 60 seconds
-        logger.info(f"Realtime Sync frequency set to {realtime_sync_frequency} seconds")
-        logger.info(f"History Sync frequency set to {history_sync_frequency} seconds")
 
+        schwab_config = inf_config['inference']['schwab']
+        first_record_time = get_first_record_time_realtime(db, schwab_config, session_record)
 
         #print(f"Total candles to process: {len(candles)}")
         initial_data_sent = False
+        realtime_sync_frequency = history_sync_frequency = 1
         while True:
             
             candles_query = db.query(PriceData).filter(
@@ -396,10 +395,17 @@ async def websocket_realtime(
                 
                 now = time.time()
                 if now - last_realtime_sync_time >= realtime_sync_frequency:
-                    realtime_res = get_realtime_quote(
-                        symbol=session_record.symbol,
-                        schwab_config=inf_config['inference']['schwab']
-                    )
+                    realtime_record = db.query(RealtimeData).filter(RealtimeData.symbol == session_record.symbol).first()
+                    if not realtime_record:
+                        logger.error(f"No realtime data found in the database for the symbol: {session_record.symbol}")
+                        continue
+                    last_time_db = get_time_field(realtime_record, "time")
+                    last_time_ms = int(last_time_db.timestamp() * 1000)
+                    realtime_res = {
+                        'time': last_time_ms,
+                        'price': realtime_record.price,
+                        'symbol': realtime_record.symbol,
+                    }
                     await websocket.send_json({
                             "type": "realtime_data",
                             "data": realtime_res
@@ -407,10 +413,8 @@ async def websocket_realtime(
                     last_realtime_sync_time = time.time()
                 if now - last_history_sync_time >= history_sync_frequency:
                     logger.debug(f"Syncing history data for session {session_id} at {current_candle.time}")
-                    first_record_time = sync_realtime_price_history(
-                        session_record.symbol,
-                        inf_config['inference']['schwab']
-                    ) 
+                    first_record_time = get_first_record_time_realtime(db, schwab_config, session_record)
+                    
                     open_trades = db.query(TradeRecord).filter(
                         TradeRecord.session_id == session_id,
                         TradeRecord.status == "OPEN"

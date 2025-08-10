@@ -1,24 +1,20 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { usePageContext } from '@/context/PageContext';
+import { set } from 'lodash';
 
 type CheckResponse = {
+    status: string;
     reauth_link?: string;
-    last_realtime_sync?: string;
-    last_history_sync?: string;
-    last_candle_time?: string;
-    sync_enabled?: boolean;
 };
 
 
 
 export const ConnectionStatusChecker = () => {
+    const { schwabConnStatus, setSchwabConnStatus } = usePageContext();
+    const [schwabStatusMessage, setSchwabStatusMessage] = useState<string>('NOT_CONNECTED');
     const [reauthUrl, setReauthUrl] = useState<string | null>(null);
-    const [lastRealtimeSync, setLastRealtimeSync] = useState<string | null>(null);
-    const [lastHistorySync, setLastHistorySync] = useState<string | null>(null);
-    const [lastCandleTime, setLastCandleTime] = useState<string | null>(null);
-    const [syncEnabled, setSyncEnabled] = useState<boolean>(false);
-
     const [isPolling, setIsPolling] = useState<boolean>(true);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const checkConnection = async ()=> {
@@ -26,19 +22,36 @@ export const ConnectionStatusChecker = () => {
             const inf_url = process.env.NEXT_PUBLIC_INF_URL;
             const res = await fetch(`${inf_url}/api/schwab/check_connection`);
             const data: CheckResponse = await res.json();
-
-            setReauthUrl(data.reauth_link || null);
-            setLastRealtimeSync(data.last_realtime_sync || null);
-            setLastHistorySync(data.last_history_sync || null);
-            setLastCandleTime(data.last_candle_time || null);
-            setSyncEnabled(data.sync_enabled || false);
-
-
+            if ( data.status === "UPDATE_REFRESH_TOKEN") {
+                setSchwabConnStatus(false);
+                setSchwabStatusMessage("Update Refresh Token");
+                setReauthUrl(data.reauth_link || null);
+                setIsPolling(false);
+            }
+            else if (data.status === "NETWORK_ERROR") {
+                setSchwabConnStatus(false);
+                setSchwabStatusMessage("Network Error.");
+                setReauthUrl(null);
+                setIsPolling(true);
+            } else if (data.status === "SUCCESS") {
+                setSchwabConnStatus(true);
+                setSchwabStatusMessage("Schwab Connection successful");
+                setReauthUrl(null);
+                setIsPolling(true);
+            }
+            else {
+                setSchwabConnStatus(false);
+                setSchwabStatusMessage("Unknown error occurred, response: " + JSON.stringify(data));
+                setReauthUrl(null);
+                setIsPolling(false);
+            }
 
 
         }
         catch (error) {
             console.error("Error checking Schwab connection:", error);
+            setSchwabConnStatus(false);
+            setSchwabStatusMessage("Error checking connection: " + error);
             setReauthUrl(null);
             setIsPolling(false);
         }
@@ -63,18 +76,16 @@ export const ConnectionStatusChecker = () => {
     };
 
     return (
-        <div style = {{ position: 'fixed', top: 10, right: 50, fontSize: '12px' }}>
-
+        <div style = {{ position: 'fixed', top: 10, right: 50 }}>
+           {schwabStatusMessage === 'Update Refresh Token' && reauthUrl ? (
                 <div>
-                    <span style={{ color: 'red' }}>sync enabled : {syncEnabled ? 'Yes' : 'No'}</span>
-                    <span style={{ color: '#55FF55', marginLeft: '10px' }}>Last Realtime Sync: {lastRealtimeSync || 'N/A'}</span>
-                    <span style={{ color: '#00BFFF', marginLeft: '10px' }}>Last History Sync: {lastHistorySync || 'N/A'}</span>
-                    <span style={{ color: '#FFB6FF', marginLeft: '10px' }}>Last Candle Time: {lastCandleTime || 'N/A'}</span>
-                    <a
+                    <span style={{ color: 'red' }}>Session expired</span>
+                    <a 
+                        href={reauthUrl} 
                         target="_blank" 
                         rel="noopener noreferrer"
                         onClick={() => {
-                            const popup = window.open(reauthUrl ?? '', '_blank');
+                            const popup = window.open(reauthUrl, '_blank');
                             const timer = setInterval(() => {
                                 if (popup && popup.closed) {
                                     clearInterval(timer);
@@ -87,7 +98,10 @@ export const ConnectionStatusChecker = () => {
                         Click here to Reauthorize
                     </a>
                 </div>
-
+            ) : (
+                    <p style = {{ color: 'green' }}>Status: {schwabStatusMessage}</p>
+                )
+            }
         </div>
     );
 };

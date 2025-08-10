@@ -1,10 +1,7 @@
-from json import load
-import random
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.db.session import SessionLocal
-from app.db.models import PriceData
-import random
+from trading_functions.db.session import SessionLocal
+from trading_functions.db.models import PriceData
 import os
 import yaml
 import pandas as pd

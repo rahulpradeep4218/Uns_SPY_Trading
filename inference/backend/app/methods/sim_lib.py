@@ -1,13 +1,10 @@
-from ast import In
-from hmac import new
-from tabnanny import check
 from sqlalchemy.exc import IntegrityError
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, Any
 from datetime import timedelta
 from sqlalchemy import desc
-from app.db.schemas import SimulationOptions
-from app.db.models import TradeSession, TradeRecord, PriceData
+from trading_functions.db.schemas import SimulationOptions
+from trading_functions.db.models import TradeSession, TradeRecord, PriceData
 from sqlalchemy.orm import Session
 from trading_functions.inference.inf_functions import (
     get_maximum_period,

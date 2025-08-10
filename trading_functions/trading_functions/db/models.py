@@ -55,9 +55,22 @@ class TradeRecord(Base):
     calc_take_profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
     profit: Mapped[float] = mapped_column(Float, default=0.0)
     exit_reason: Mapped[Optional[str]] = mapped_column(String, default=None)  # e.g., "stop_loss", "take_profit", "max_hold_time"
+    realtime_trade_id: Mapped[Optional[str]] = mapped_column(String, default=None)  # ID for real-time trades
 
     session: Mapped["TradeSession"] = relationship("TradeSession", back_populates="trade_records")
     ohlc_data: Mapped[Optional["PriceData"]] = relationship("PriceData", viewonly=True,
                              primaryjoin="and_(TradeRecord.symbol == foreign(PriceData.symbol), "
                              "TradeRecord.trade_time == foreign(PriceData.time))"
     )
+
+
+class RealtimeData(Base):
+    __tablename__ = "realtime_data"
+    symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    time: Mapped[datetime] = mapped_column(DateTime)
+    open: Mapped[float] = mapped_column(Float)
+    high: Mapped[float] = mapped_column(Float)
+    low: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)
+    realtime_last_sync_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    history_last_sync_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)

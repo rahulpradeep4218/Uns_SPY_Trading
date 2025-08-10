@@ -2,10 +2,10 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.db import models, schemas
+from trading_functions.db import models, schemas
 from app.api.deps import get_db
 from typing import List, Dict
-from app.db.schemas import Coverage, CoverageResponse
+from trading_functions.db.schemas import CoverageResponse
 from trading_functions.inference.inf_functions import (
     make_random_candles
 )

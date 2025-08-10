@@ -1,20 +1,21 @@
 import base64
-from operator import index
-from shlex import quote
+from multiprocessing import connection
 import requests
 from ruamel.yaml import YAML
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import pandas as pd
-from dateutil import tz, parser
-from app.utility.time_utilities import to_epoch_ms_est, epoch_ms_to_est
-from app.db.models import PriceData
+from dateutil import tz
+from app.utility.time_utilities import to_epoch_ms_est
+from trading_functions.db.models import PriceData, RealtimeData
 from sqlalchemy.orm import Session
-from app.db.session import SessionLocal
+from trading_functions.db.session import SessionLocal
+from trading_functions.db.models import RealtimeData
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import func
 import logging
 from time import time
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,17 @@ def get_schwab_config(config_path: str = None) -> dict:
     with open(config_path, 'r') as file:
         config = yaml.load(file)
     return config['inference']['schwab']
+
+def get_inf_config():
+    inf_config_path = os.getenv('CONFIG_PATH', 'NO_PATH')
+    if not inf_config_path or not os.path.exists(inf_config_path):
+        raise FileNotFoundError(f"Configuration file not found at {inf_config_path}")
+    
+    with open(inf_config_path, 'r') as file:
+        inf_config = yaml.load(file)
+    
+    return inf_config
+
 
 def exchange_code_for_token(auth_code: str, schwab_config: dict) -> str:
     """
@@ -73,7 +85,7 @@ def exchange_code_for_token(auth_code: str, schwab_config: dict) -> str:
     return response.json()
 
 
-def update_access_token_using_refresh_token(schwab_config: dict) -> dict:
+async def update_access_token_using_refresh_token(schwab_config: dict) -> dict:
     """
     Refresh the access token using the provided refresh token.
 
@@ -98,9 +110,9 @@ def update_access_token_using_refresh_token(schwab_config: dict) -> dict:
 
     response = requests.post(url=token_url, headers=headers, data=data)
     if response.status_code != 200:
-        print(f"Error fetching access token using refresh token: HTTP {response.status_code}")
+        logger.error(f"Error fetching access token using refresh token: HTTP {response.status_code}")
         if response.status_code == 401 or response.status_code == 400:
-            print("Unauthorized request. Refresh token needs to be updated")
+            logger.warning("Unauthorized request. Refresh token needs to be updated")
             return {
                 "status": "UPDATE_REFRESH_TOKEN", 
                 "message": "Refresh token needs to be updated.",
@@ -112,7 +124,7 @@ def update_access_token_using_refresh_token(schwab_config: dict) -> dict:
 
 
 
-def get_schwab_url_for_auth_code(schwab_config: dict) -> str:
+async def get_schwab_url_for_auth_code(schwab_config: dict) -> str:
     """
     Generate the URL for Schwab OAuth authorization code flow.
     """
@@ -130,7 +142,7 @@ def get_schwab_url_for_auth_code(schwab_config: dict) -> str:
     url = f"{auth_url}?{requests.compat.urlencode(params)}"
     return url
 
-def check_schwab_connection(schwab_config: dict) -> dict:
+async def check_schwab_connection(schwab_config: dict) -> dict:
     """
     Check if the Schwab API is reachable and the access token is valid.
     """
@@ -138,7 +150,7 @@ def check_schwab_connection(schwab_config: dict) -> dict:
     if not access_token:
         return {"status": "NO_ACCESS_TOKEN", "message": "Access token is missing."}
     symbol = schwab_config.get("symbol", "SPY")
-    check_price_response = get_price_history(
+    check_price_response = await get_price_history(
         symbol=symbol, 
         access_token=access_token, 
         period=1, 
@@ -152,17 +164,58 @@ def check_schwab_connection(schwab_config: dict) -> dict:
     if check_price_response.status_code == 200:
         return {"status": "SUCCESS", "message": "Connection successful."}
     elif check_price_response.status_code == 401:
-        print("Unauthorized request. Access token needs to be updated.")
-        print("Trying to use refresh token to get new access token...")
-        update_response = update_access_token_using_refresh_token(schwab_config)
+        logger.warning("Unauthorized request. Access token needs to be updated.")
+        logger.warning("Trying to use refresh token to get new access token...")
+        update_response = await update_access_token_using_refresh_token(schwab_config)
         return update_response
     else:
-        print("Problem with network connection")
+        logger.error("Problem with network connection")
         return {"status": "NETWORK_ERROR", "message": "Network connection issue."}
 
 
+async def get_est_string_for_utc_time(utc_time: datetime) -> str:
+    """
+    Convert UTC datetime to EST string.
+    """
+    if utc_time.tzinfo is None:
+        utc_time = utc_time.replace(tzinfo=timezone.utc)
+    est_time = utc_time.astimezone(ZoneInfo("America/New_York"))
+    return est_time.strftime("%Y-%m-%d %H:%M:%S")
 
-def get_price_history(
+
+async def get_schwab_connection_info_from_db(symbol: str) -> dict:
+    """
+    Get the Schwab connection information.
+    """
+    db: Session = SessionLocal()
+    connection_info = db.query(RealtimeData).filter(RealtimeData.symbol == symbol).first()
+    if not connection_info:
+        return {"status": "ERROR", "message": "No RealtimeData Record found in DB."}
+    time_val = connection_info.time
+    realtime_sync_time = connection_info.realtime_last_sync_time
+    history_sync_time = connection_info.history_last_sync_time
+    time_val_str = await get_est_string_for_utc_time(time_val)
+    realtime_sync_time_str = await get_est_string_for_utc_time(realtime_sync_time)
+    history_sync_time_str = await get_est_string_for_utc_time(history_sync_time)
+    schwab_config = get_schwab_config()
+    realtime_enabled = schwab_config.get("enable_realtime", 0)
+    realtime_enabled = 'True' if realtime_enabled else 'False'
+    reauth_link = await get_schwab_url_for_auth_code(schwab_config)
+    return {
+        "status": "SUCCESS",
+        "symbol": symbol,
+        "last_candle_time": time_val_str,
+        "last_realtime_sync": realtime_sync_time_str,
+        "last_history_sync": history_sync_time_str,
+        "sync_enabled": realtime_enabled,
+        "reauth_link": reauth_link
+    }
+
+    return {"status": "SUCCESS", "data": connection_info}
+
+
+
+async def get_price_history(
         symbol: str, 
         access_token: str, 
         period: int, 
@@ -212,8 +265,18 @@ def get_price_history(
     return response
     #return pd.DataFrame(data['candles'])
 
+async def handle_schwab_connection_error(response, schwab_config: dict):
+    logger.error(f"Error fetching real-time quote: HTTP {response.status_code}")
+    logger.error("Response body: %s", response.text)
+    logger.info("Trying to check and fix schwab connection...")
+    connection_status = await check_schwab_connection(schwab_config)
+    if connection_status.get("status", "") != "SUCCESS":
+        logger.error("Not able to connect to Schwab API, message: %s", connection_status.get("message", ""))
+        if connection_status.get("status", "") == "UPDATE_REFRESH_TOKEN":
+            logger.error("Refresh token needs to be updated, so disabling realtime temporarily. To enable back, update in config")
+            update_schwab_config("realtime_enabled", 0)
 
-def get_realtime_quote(symbol: str, schwab_config: dict) -> pd.DataFrame:
+async def get_realtime_quote(symbol: str, schwab_config: dict) -> dict:
     """
     Fetch the latest real-time quote for a given symbol.
     Returns a DataFrame with the latest quote.
@@ -231,9 +294,8 @@ def get_realtime_quote(symbol: str, schwab_config: dict) -> pd.DataFrame:
 
     response = requests.get(url=url, headers=headers, params=params)
     if response.status_code != 200:
-        print(f"Error fetching real-time quote: HTTP {response.status_code}")
-        print("Response body:", response.text)
-        response.raise_for_status()
+        await handle_schwab_connection_error(response, schwab_config)
+        return None
     quote_data = response.json().get(symbol, {}).get("quote", {})
     last_price = quote_data.get("mark")
     time_data = quote_data.get("quoteTime")
@@ -245,7 +307,7 @@ def get_realtime_quote(symbol: str, schwab_config: dict) -> pd.DataFrame:
     return return_res
 
 
-def sync_realtime_price_history(
+async def sync_realtime_price_history(
         symbol: str, 
         schwab_config: dict) -> pd.DataFrame:
     db: Session = SessionLocal()
@@ -255,7 +317,7 @@ def sync_realtime_price_history(
         print("Access token is missing.")
         return pd.DataFrame()
     print("Period days : ", periodDays)
-    res = get_price_history(
+    res = await get_price_history(
         symbol=symbol, 
         access_token=access_token, 
         period=periodDays, 
@@ -265,6 +327,10 @@ def sync_realtime_price_history(
         schwab_config=schwab_config,
         use_period=True
     )
+    if res.status_code != 200:
+        logger.error(f"Error fetching price history: HTTP {res.status_code}")
+        await handle_schwab_connection_error(res, schwab_config)
+        return pd.DataFrame()
 
     data = res.json()
     df = pd.DataFrame(data['candles'])
@@ -310,6 +376,120 @@ def sync_realtime_price_history(
     db.execute(stmt)
     db.commit()
     return first_record_time
+
+
+
+async def round_to_next_minute(dt: datetime) -> datetime:
+    """Round UTC datetime to the start of the *next* minute."""
+    # Ensure it's timezone-aware UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    
+    timestamp_ms = int(dt.timestamp() * 1000)  # milliseconds
+    rounded_ms = (timestamp_ms // 60000) * 60000 + 60000
+    return datetime.fromtimestamp(rounded_ms / 1000, tz=timezone.utc)
+
+
+async def get_time_field(rt_record: RealtimeData, field: str) -> datetime:
+    time_val = None
+    if field == "time":
+        time_val = rt_record.time
+    elif field == "realtime_last_sync_time":
+        time_val = rt_record.realtime_last_sync_time
+    elif field == "history_last_sync_time":
+        time_val = rt_record.history_last_sync_time
+
+    if time_val is None:
+        raise ValueError(f"Invalid field: {field}")
+    if time_val.tzinfo is None:
+        time_val = time_val.replace(tzinfo=timezone.utc)
+    else:
+        time_val = time_val.astimezone(timezone.utc)
+    return time_val
+
+async def should_update_time(time_val: datetime, type: str, schwab_config) -> bool:
+    if type == "realtime":
+        sync_frequency = schwab_config.get('realtime_schwab_sync_frequency', 20)  # Default to 20 seconds
+    elif type == "history":
+        sync_frequency = schwab_config.get('history_schwab_sync_frequency', 60)  # Default to 60 seconds
+    else:
+        raise ValueError(f"Invalid type: {type}")
+
+    now_utc = datetime.now(timezone.utc)
+    diff_seconds = (now_utc - time_val).total_seconds()
+    return diff_seconds > sync_frequency
+
+
+    
+async def schwab_data_backend_update(symbol: str):
+    """
+    Background task to update Schwab data periodically.
+    This function can be run as a background task in FastAPI.
+    """
+    logger.info("Starting Schwab data backend update...")
+    inf_config = get_inf_config()
+    if not inf_config['inference']['schwab'].get('enable_realtime', False):
+        logger.info("Realtime data sync is disabled in the configuration.")
+        return
+    access_token = inf_config['inference']['schwab'].get('access_token')
+    if not access_token:
+        logger.error("No access token found for Schwab API.")
+        return
+    db: Session = SessionLocal()
+
+    realtime_record = db.query(RealtimeData).filter(RealtimeData.symbol == symbol).first()
+    if not realtime_record:
+        logger.error(f"No realtime data found in the database for the symbol: {symbol}")
+        return
+
+    schwab_config = inf_config['inference']['schwab']
+
+    realtime_last_sync_time = await get_time_field(realtime_record, "realtime_last_sync_time")
+    history_last_sync_time = await get_time_field(realtime_record, "history_last_sync_time")
+    if await should_update_time(realtime_last_sync_time, "realtime", schwab_config):
+        logger.info("Syncing real-time data for symbol: %s", symbol)
+        realtime_res = await get_realtime_quote(
+            symbol=symbol,
+            schwab_config=inf_config['inference']['schwab']
+        )
+        if not realtime_res:
+            return
+        schwab_time_utc = datetime.fromtimestamp(realtime_res['time'] / 1000, tz=timezone.utc)
+        schwab_rounded_time = await round_to_next_minute(schwab_time_utc)
+        last_time_db = await get_time_field(realtime_record, "time")
+        price = realtime_res['price']
+        if last_time_db != schwab_rounded_time:
+            logger.info("Updating candle to next minute: %s", schwab_rounded_time)
+            realtime_record.time = schwab_rounded_time
+            open_price = price
+            high_price = price
+            low_price = price
+        else:
+            open_price = realtime_record.open
+            high_price = max(realtime_record.high, price)
+            low_price = min(realtime_record.low, price)
+        
+        realtime_record.open = open_price
+        realtime_record.high = high_price
+        realtime_record.low = low_price
+        realtime_record.price = price
+        realtime_record.realtime_last_sync_time = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(realtime_record)
+
+    if await should_update_time(history_last_sync_time, "history", schwab_config):
+        logger.info("Syncing historical data for symbol: %s", symbol)
+        first_record_time = await sync_realtime_price_history(
+            symbol,
+            inf_config['inference']['schwab']
+        ) 
+        realtime_record.history_last_sync_time = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(realtime_record)
+
+
 
 if __name__ == "__main__":
     schwab_config = get_schwab_config()

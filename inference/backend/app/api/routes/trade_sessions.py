@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.db import models, schemas, crud
+from trading_functions.db import schemas, crud
 from app.api.deps import get_db
 from typing import Optional
 
