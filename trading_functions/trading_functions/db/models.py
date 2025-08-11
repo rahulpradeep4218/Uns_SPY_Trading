@@ -74,3 +74,22 @@ class RealtimeData(Base):
     price: Mapped[float] = mapped_column(Float)
     realtime_last_sync_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
     history_last_sync_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+
+class SchwabOrders(Base):
+    __tablename__ = "schwab_orders"
+    open_order_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    close_order_id: Mapped[str] = mapped_column(String, index=True)
+    open_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    close_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)
+    take_profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    stop_loss: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    entry_price: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    exit_price: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    option_entry_price: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    option_exit_price: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    open_status: Mapped[str] = mapped_column(String, default="OPEN")
+    close_status: Mapped[Optional[str]] = mapped_column(String, default=None)  # e.g., "CLOSED", "CANCELLED"
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -1,13 +1,15 @@
 import base64
 from multiprocessing import connection
+from tracemalloc import stop
 import requests
+from inference.backend.app.api.routes import schwab
 from ruamel.yaml import YAML
 from datetime import datetime, timezone
 import os
 import pandas as pd
 from dateutil import tz
 from app.utility.time_utilities import to_epoch_ms_est
-from trading_functions.db.models import PriceData, RealtimeData
+from trading_functions.db.models import PriceData, RealtimeData, SchwabOrders
 from sqlalchemy.orm import Session
 from trading_functions.db.session import SessionLocal
 from trading_functions.db.models import RealtimeData
@@ -85,6 +87,39 @@ def exchange_code_for_token(auth_code: str, schwab_config: dict) -> str:
     return response.json()
 
 
+def exchange_code_for_token_account(auth_code: str, schwab_config: dict) -> str:
+    """
+    Exchange the provided authorization code for an access token.
+
+    Returns a dict containing access_token, refresh_token, expires_in, and scope.
+    """
+    # Prepare Basic Auth header
+    client_id = schwab_config.get("client_id_account")
+    client_secret = schwab_config.get("client_secret_account")
+    redirect_uri = schwab_config.get("redirect_uri_account")
+    token_url = schwab_config.get('base_oauth_url') + schwab_config.get('token_url_add')
+    credentials = f"{client_id}:{client_secret}".encode("utf-8")
+    basic_auth = base64.b64encode(credentials).decode("utf-8")
+    #print(f"Basic Auth: {basic_auth}")
+    headers = {
+        "Authorization": f"Basic {basic_auth}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = {
+        "code": auth_code,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+        "scope": "readonly"
+    }
+    #print(f"Data : {data}")
+    response = requests.post(url=token_url, headers=headers, data=data)
+    if response.status_code != 200:
+        print(f"Error fetching Schwab token using code: {auth_code} HTTP {response.status_code}")
+        print("Response body:", response.text)
+        return response.json()
+    #print(f"Response: {response.json()}")
+    return response.json()
+
 async def update_access_token_using_refresh_token(schwab_config: dict) -> dict:
     """
     Refresh the access token using the provided refresh token.
@@ -116,10 +151,49 @@ async def update_access_token_using_refresh_token(schwab_config: dict) -> dict:
             return {
                 "status": "UPDATE_REFRESH_TOKEN", 
                 "message": "Refresh token needs to be updated.",
-                "reauth_link": get_schwab_url_for_auth_code(schwab_config)
+                "reauth_link": await get_schwab_url_for_auth_code(schwab_config)
             }
         return {"status": "CONNECTION_ERROR", "message": f"Error fetching access token using refresh token: HTTP {response.status_code}"}
     update_schwab_config("access_token", response.json().get("access_token"))
+    return {"status": "SUCCESS", "message": "Access token refreshed successfully."}
+
+
+
+async def account_update_access_token_using_refresh_token(schwab_config: dict) -> dict:
+    """
+    Refresh the access token using the provided refresh token.
+
+    Returns a dict containing access_token, expires_in, and scope.
+    """
+    client_id = schwab_config.get("client_id_account")
+    client_secret = schwab_config.get("client_secret_account")
+    refresh_token = schwab_config.get("refresh_token_account")
+    credentials = f"{client_id}:{client_secret}".encode("utf-8")
+    basic_auth = base64.b64encode(credentials).decode("utf-8")
+    headers = {
+        "Authorization": f"Basic {basic_auth}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = {
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+        "scope": "readonly"
+    }
+    token_url = schwab_config.get('base_oauth_url') + schwab_config.get('token_url_add')
+    logger.info(f"Trying to refresh access token using url {token_url} for Account")
+
+    response = requests.post(url=token_url, headers=headers, data=data)
+    if response.status_code != 200:
+        logger.error(f"Error fetching access token using refresh token: HTTP {response.status_code}")
+        if response.status_code == 401 or response.status_code == 400:
+            logger.warning("Unauthorized request. Refresh token needs to be updated for Account")
+            return {
+                "status": "UPDATE_REFRESH_TOKEN", 
+                "message": "Refresh token needs to be updated.",
+                "reauth_link": await get_schwab_url_for_auth_code_account(schwab_config)
+            }
+        return {"status": "CONNECTION_ERROR", "message": f"Error fetching access token using refresh token for account: HTTP {response.status_code}"}
+    update_schwab_config("access_token_account", response.json().get("access_token"))
     return {"status": "SUCCESS", "message": "Access token refreshed successfully."}
 
 
@@ -141,6 +215,27 @@ async def get_schwab_url_for_auth_code(schwab_config: dict) -> str:
     
     url = f"{auth_url}?{requests.compat.urlencode(params)}"
     return url
+
+
+async def get_schwab_url_for_auth_code_account(schwab_config: dict) -> str:
+    """
+    Generate the URL for Schwab OAuth authorization code flow.
+    """
+    client_id = schwab_config.get("client_id_account")
+    redirect_uri = schwab_config.get("redirect_uri_account")
+    auth_url = schwab_config.get('base_oauth_url') + schwab_config.get('auth_url_add')
+    
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "scope": "readonly"
+    }
+    
+    url = f"{auth_url}?{requests.compat.urlencode(params)}"
+    return url
+
+
 
 async def check_schwab_connection(schwab_config: dict) -> dict:
     """
@@ -167,6 +262,27 @@ async def check_schwab_connection(schwab_config: dict) -> dict:
         logger.warning("Unauthorized request. Access token needs to be updated.")
         logger.warning("Trying to use refresh token to get new access token...")
         update_response = await update_access_token_using_refresh_token(schwab_config)
+        return update_response
+    else:
+        logger.error("Problem with network connection")
+        return {"status": "NETWORK_ERROR", "message": "Network connection issue."}
+
+
+async def check_schwab_account_connection(schwab_config: dict, response) -> dict:
+    """
+    Check if the Schwab API is reachable and the access token is valid.
+    """
+    access_token_account = schwab_config.get("access_token_account")
+    if not access_token_account:
+        return {"status": "NO_ACCESS_TOKEN", "message": "Access token is missing."}
+    symbol = schwab_config.get("symbol", "SPY")
+
+    if response.status_code == 200:
+        return {"status": "SUCCESS", "message": "Connection successful."}
+    elif response.status_code == 401 or response.status_code == 400:
+        logger.warning("Unauthorized request. Access token needs to be updated.")
+        logger.warning("Trying to use refresh token to get new access token...")
+        update_response = await account_update_access_token_using_refresh_token(schwab_config)
         return update_response
     else:
         logger.error("Problem with network connection")
@@ -211,7 +327,6 @@ async def get_schwab_connection_info_from_db(symbol: str) -> dict:
         "reauth_link": reauth_link
     }
 
-    return {"status": "SUCCESS", "data": connection_info}
 
 
 
@@ -274,7 +389,19 @@ async def handle_schwab_connection_error(response, schwab_config: dict):
         logger.error("Not able to connect to Schwab API, message: %s", connection_status.get("message", ""))
         if connection_status.get("status", "") == "UPDATE_REFRESH_TOKEN":
             logger.error("Refresh token needs to be updated, so disabling realtime temporarily. To enable back, update in config")
-            update_schwab_config("realtime_enabled", 0)
+            update_schwab_config("enable_realtime", 0)
+
+async def handle_schwab_account_connection_error(response, schwab_config: dict):
+    logger.error(f"Error fetching real-time account trading data: HTTP {response.status_code}")
+    logger.error("Response body: %s", response.text)
+    logger.info("Trying to check and fix schwab account connection...")
+    connection_status = await check_schwab_account_connection(schwab_config= schwab_config, response=response)
+    if connection_status.get("status", "") != "SUCCESS":
+        logger.error("Not able to connect to Schwab API, message: %s", connection_status.get("message", ""))
+        if connection_status.get("status", "") == "UPDATE_REFRESH_TOKEN":
+            logger.error("Refresh token needs to be updated, so disabling realtime temporarily. To enable back, update in config")
+            update_schwab_config("enable_realtime_account", 0)
+
 
 async def get_realtime_quote(symbol: str, schwab_config: dict) -> dict:
     """
@@ -305,6 +432,79 @@ async def get_realtime_quote(symbol: str, schwab_config: dict) -> dict:
         "time": time_data
     }
     return return_res
+
+
+async def get_realtime_price_from_db(db: Session, symbol: str):
+    realtime_row = db.query(RealtimeData).filter(RealtimeData.symbol == symbol).first()
+    if not realtime_row:
+        return None
+    price = realtime_row.price
+    return price
+
+
+async def parse_option_symbol(symbol: str) -> dict:
+    """
+    Parse Schwab-style option symbol into components.
+    
+    Example:
+        "SPY   250807C00631000" ->
+        {
+            "underlying": "SPY",
+            "expiration_date": "2025-08-07",
+            "type": "CALL",
+            "strike_price": 631.0
+        }
+    """
+    # Trim and split underlying from the rest
+    underlying = symbol[:6].strip()  # First 6 chars contain underlying padded with spaces
+    date_part = symbol[6:12]         # YYMMDD
+    type_part = symbol[12]           # C or P
+    strike_part = symbol[13:]        # Strike price as 8 digits
+
+    # Convert expiration date
+    year = 2000 + int(date_part[0:2])
+    month = int(date_part[2:4])
+    day = int(date_part[4:6])
+    expiration_date = f"{year:04d}-{month:02d}-{day:02d}"
+
+    # Type mapping
+    opt_type = "CALL" if type_part.upper() == "C" else "PUT"
+
+    # Strike price conversion
+    strike_price = int(int(strike_part) / 1000)  # because 00631000 → 631.000
+
+    return {
+        "underlying": underlying,
+        "expiration_date": expiration_date,
+        "type": opt_type,
+        "strike_price": strike_price
+    }
+
+
+
+async def get_schwab_orders_df(schwab_config: dict) -> pd.DataFrame:
+    """
+    Fetch all Schwab orders and return as a DataFrame.
+    """
+    access_token_account = schwab_config.get("access_token_account")
+    account_id = schwab_config.get("encrypted_account_id")
+    account_url = schwab_config.get("account_data_url", "")
+    headers = {
+        "Authorization": f"Bearer {access_token_account}",
+        "accept": "application/json"
+    }
+    orders_url = f"{account_url}/{account_id}/orders"
+    params = {
+        "maxResults": 100
+    }
+    response = requests.get(url=orders_url, headers=headers, params=params)
+    if response.status_code != 200 or response.status_code != 201:
+        await handle_schwab_account_connection_error(response, schwab_config)
+        return pd.DataFrame()
+    logger.info(f"Fetched {len(response.json().get('orders', []))} orders from Schwab API.")
+
+    orders_data = response.json()
+    return pd.DataFrame(orders_data)
 
 
 async def sync_realtime_price_history(
@@ -488,6 +688,51 @@ async def schwab_data_backend_update(symbol: str):
         realtime_record.history_last_sync_time = datetime.now(timezone.utc)
         db.commit()
         db.refresh(realtime_record)
+
+
+
+async def check_schwab_orders(db: Session, symbol: str):
+    schwab_config = get_schwab_config()
+    schwab_orders_df = await get_schwab_orders_df(schwab_config=schwab_config)
+
+    open_schwab_orders = (
+        db.query(SchwabOrders)
+        .filter(
+            SchwabOrders.closed == False
+        )
+        .all()
+    )
+    for order in open_schwab_orders:
+        order_row = schwab_orders_df[schwab_orders_df['orderId'] == order.open_order_id]
+        if not order_row.empty:
+            order_row = order_row.iloc[0]
+            order.open_status = order_row['status']
+            
+            if order_row['status'] == 'FILLED':
+                option_details = await parse_option_symbol(order.symbol)
+                option_type = option_details['type']
+                
+                logger.info(f"Order {order.open_order_id} is filled. checking condition to close order")
+                current_price = await get_realtime_price_from_db(db, symbol)
+                take_profit_reached = current_price > order.take_profit if option_type == "CALL" else current_price < order.take_profit
+                stop_loss_reached = current_price < order.stop_loss if option_type == "CALL" else current_price > order.stop_loss
+                if take_profit_reached or stop_loss_reached:
+                    if stop_loss_reached:
+                        
+                        logger.info(f"Order {order.open_order_id} hit stop loss. Closing the order.")
+                    elif take_profit_reached:
+                        logger.info(f"Order {order.open_order_id} hit take profit. Closing the order.")
+
+                order.close_time = datetime.now(timezone.utc)
+                order.close_price = order_row['averagePrice']
+                db.commit()
+            elif order_row['status'] == 'CANCELED':
+                logger.info(f"Order {order.open_order_id} is canceled. Closing the order in the database.")
+                order.closed = True
+                order.close_time = datetime.now(timezone.utc)
+                db.commit()
+        else:
+            logger.warning(f"Order {order.open_order_id} not found in Schwab orders data.")
 
 
 
