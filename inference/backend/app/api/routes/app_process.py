@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -19,7 +19,7 @@ from app.methods.sim_lib import run_simulation_one_candle, run_realtime_one_cand
 import time
 import logging
 import math
-
+from app.methods.schwab_methods import get_time_field
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -399,7 +399,7 @@ async def websocket_realtime(
                     if not realtime_record:
                         logger.error(f"No realtime data found in the database for the symbol: {session_record.symbol}")
                         continue
-                    last_time_db = get_time_field(realtime_record, "time")
+                    last_time_db = await get_time_field(realtime_record, "time")
                     last_time_ms = int(last_time_db.timestamp() * 1000)
                     realtime_res = {
                         'time': last_time_ms,
@@ -458,17 +458,21 @@ async def websocket_realtime(
                     ).first()
                     if trade_candle:
                         continue
-                    result = await run_realtime_one_candle(
-                        db,
-                        session_record,
-                        training_config,
-                        current_candle,
-                        sim_options,
-                        model_high,
-                        model_low,
-                        scalers,
-                        inf_config=inf_config
-                    )
+                    try:
+                        result = await run_realtime_one_candle(
+                            db,
+                            session_record,
+                            training_config,
+                            current_candle,
+                            sim_options,
+                            model_high,
+                            model_low,
+                            scalers,
+                            inf_config=inf_config
+                        )
+                    except Exception as e:
+                        logger.error(f"Error processing candle {current_candle.time}: {str(e)}")
+                        raise HTTPException(status_code=500, detail=str(e))
 
                 
                 progress = 0

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from app.methods.schwab_methods import (
     get_schwab_config, 
     exchange_code_for_token,
@@ -8,13 +8,23 @@ from app.methods.schwab_methods import (
     check_schwab_connection,
     get_price_history,
     get_realtime_quote,
-    get_schwab_connection_info_from_db
+    get_schwab_connection_info_from_db,
+    insert_new_schwab_order_db
 )
 import pandas as pd
-from trading_functions.db.models import PriceData
+from trading_functions.db.models import PriceData, TradeRecord, TradeSession
 from sqlalchemy.orm import Session
 from trading_functions.db.session import SessionLocal
 from sqlalchemy.dialects.postgresql import insert
+from datetime import datetime
+from pydantic import BaseModel
+import logging
+
+logger = logging.getLogger("Schwab API Logging")
+
+class SchwabOrderRequest(BaseModel):
+    session_id: int
+    trade_time: str
 
 router = APIRouter()
 
@@ -114,6 +124,55 @@ async def get_realtime_quote_api(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+@router.post("/add-schwab-order")
+async def add_schwab_order_post(order_request: SchwabOrderRequest):
+    """
+    Create a new Schwab order from a POST request.
+    """
+    try:
+        session_id = order_request.session_id
+        trade_time = order_request.trade_time
+        logger.info(f"Adding Schwab order for session_id: {session_id}, trade_time: {trade_time}")
+
+        db: Session = SessionLocal()
+        schwab_config = get_schwab_config()
+        trade_record = db.query(TradeRecord).filter(
+            TradeRecord.session_id == session_id,
+            TradeRecord.trade_time == datetime.fromisoformat(trade_time)
+        ).first()
+        if not trade_record:
+            db.close()
+            logger.error(f"Trade record not found for session_id: {session_id} and trade_time: {trade_time}")
+            return JSONResponse(content={"error": "Trade record not found"}, status_code=404)
+        else:
+            option_type = "CALL" if trade_record.signal == 1 else "PUT"
+
+            session_record = db.query(TradeSession).filter(
+                TradeSession.id == session_id
+            ).first()
+            if not session_record:
+                db.close()
+                return JSONResponse(content={"error": "Trade session not found"}, status_code=404)
+            symbol = session_record.symbol
+            take_profit = trade_record.calc_take_profit if trade_record.calc_take_profit else None
+            stop_loss = trade_record.calc_stop_loss if trade_record.calc_stop_loss else None
+            insert_response = await insert_new_schwab_order_db(
+                symbol=symbol,
+                option_type=option_type,
+                db=db,
+                take_profit=take_profit,
+                stop_loss=stop_loss
+            )
+            db.close()
+            return JSONResponse(content=insert_response, status_code=200)
+        
+    except Exception as e:
+        logger.error(f"Error adding Schwab order: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/sync-realtime")
 async def sync_realtime(symbol: str, period: int = 1, use_period: bool = True, start_time: str = None):
     """
@@ -163,6 +222,7 @@ async def sync_realtime(symbol: str, period: int = 1, use_period: bool = True, s
 
         db.execute(stmt)
         db.commit()
+        db.close()
         return {"status": "success", "message": "Data synced successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

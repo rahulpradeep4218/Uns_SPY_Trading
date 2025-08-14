@@ -57,11 +57,11 @@ CREATE TABLE IF NOT EXISTS realtime_data(
 );
 
 CREATE TABLE IF NOT EXISTS schwab_orders(
-    open_order_id VARCHAR(20) NOT NULL,
+    open_order_id VARCHAR(20),
     close_order_id VARCHAR(20),
     open_time TIMESTAMP NOT NULL,
     close_time TIMESTAMP,
-    symbol VARCHAR(20) NOT NULL,
+    symbol VARCHAR(30) NOT NULL,
     take_profit NUMERIC(12, 4),
     stop_loss NUMERIC(12, 4),
     entry_price NUMERIC(12, 4),
@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS schwab_orders(
     close_status VARCHAR(20),
     quantity INTEGER NOT NULL,
     profit NUMERIC(12, 2),
-    closed BOOLEAN DEFAULT FALSE
+    closed BOOLEAN DEFAULT FALSE,
+    notes TEXT
 );
 
 INSERT INTO realtime_data (

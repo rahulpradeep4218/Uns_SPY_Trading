@@ -1,70 +1,69 @@
-'use client';
-
 import { useState } from 'react';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    Typography,
-    Button,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    TextField
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Typography, Button,
+    Snackbar, Alert
 } from '@mui/material';
-
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AssignmentIcon from '@mui/icons-material/Assignment';
-
-
 import { TradeRecord } from '@/app/types';
 import { usePageContext } from '@/context/PageContext';
 
 export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
-
     const { selected_session } = usePageContext();
-    const [open, setOpen] = useState(false);
-    const [tosCode, setTosCode] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleOpenDialog = async (trade: TradeRecord) => {
+    // Snackbar state
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info'>('info');
+
+    const handleOpenSnackbar = (message: string, status: string) => {
+        setSnackbarMessage(message);
+        setSnackbarSeverity(status.toLowerCase() === 'success' ? 'success' :
+            status.toLowerCase() === 'error' ? 'error' : 'info');
+        setSnackbarOpen(true);
+    };
+
+    const handleCloseSnackbar = (_?: unknown, reason?: string) => {
+        if (reason === 'clickaway') return;
+        setSnackbarOpen(false);
+    };
+
+    const handlePlaceOrder = async (trade: TradeRecord) => {
         setLoading(true);
-        try{
-            console.log("fetching tos code from url : ", `${process.env.NEXT_PUBLIC_INF_URL}/api/process/get-tos-order?session_id=${selected_session}&trade_time=${trade.trade_time}`);
-            const res = await fetch(`${process.env.NEXT_PUBLIC_INF_URL}/api/process/get-tos-order?session_id=${selected_session}&trade_time=${trade.trade_time}`);
+        try {
+            console.log("Placing Schwab order:", `${process.env.NEXT_PUBLIC_INF_URL}/api/schwab/add-schwab-order?session_id=${selected_session}&trade_time=${trade.trade_time}`);
+            const res = await fetch(
+                `${process.env.NEXT_PUBLIC_INF_URL}/api/schwab/add-schwab-order`,
+                { method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: selected_session,
+                        trade_time: trade.trade_time
+                    })
+                 }
+            );
             const data = await res.json();
-            setTosCode(data.tos_order_code);
-            setOpen(true);
-        } catch(err) {
-            console.error("Error fetching TOS code:", err);
+
+            // Show backend message & status in short-lived popup
+            handleOpenSnackbar(data.message || 'Order placed.', data.status || 'info');
+        } catch (err) {
+            console.error("Error placing Schwab order:", err);
+            handleOpenSnackbar('Failed to place order', 'error');
         } finally {
             setLoading(false);
         }
-        
-    };
-
-    const handleCloseDialog = () => setOpen(false);
-
-    const handleCopyCode = () => {
-        navigator.clipboard.writeText(tosCode);
-        alert("TOS code copied to clipboard!");
     };
 
     return (
-        <Paper sx={{ p: 3, height: '100%'}}>
+        <Paper sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>Trade Records</Typography>
             <TableContainer component={Paper} variant="outlined" sx={{
                 maxHeight: '400px',
                 overflow: 'auto',
             }}>
-                <Table size="small" aria-label="trades table" stickyHeader>
+                <Table size="small" stickyHeader>
                     <TableHead>
-                        <TableRow sx={{ backgroundColor: 'background.default' }}>
+                        <TableRow>
                             <TableCell><Typography variant="subtitle2">Action</Typography></TableCell>
                             <TableCell><Typography variant="subtitle2">Trade Time</Typography></TableCell>
                             <TableCell><Typography variant="subtitle2">Profit</Typography></TableCell>
@@ -72,54 +71,45 @@ export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
                             <TableCell><Typography variant="subtitle2">Signal</Typography></TableCell>
                             <TableCell><Typography variant="subtitle2">Entry Price</Typography></TableCell>
                             <TableCell><Typography variant="subtitle2">Exit Reason</Typography></TableCell>
-
-
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {trades.map((trade) => (
-                            <TableRow 
-                                key={String(trade.trade_time)}
-                                hover
-                                sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                                >
-
+                            <TableRow key={String(trade.trade_time)} hover>
                                 <TableCell>
                                     <Button
                                         variant="outlined"
                                         size="small"
                                         startIcon={<AssignmentIcon />}
-                                        onClick={() => handleOpenDialog(trade) }
+                                        onClick={() => handlePlaceOrder(trade)}
+                                        disabled={loading}
                                     >
-                                        {loading ? 'Generating...' : 'Generate TOS Code'}
-
+                                        {loading ? 'Placing...' : 'Place Order'}
                                     </Button>
                                 </TableCell>
-
-                                <TableCell component="th" scope="row">
+                                <TableCell>
                                     <Typography variant="body2">
                                         {new Date(trade.trade_time).toLocaleString()}
                                     </Typography>
                                 </TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 'medium' }}>
-                                    <Typography variant="body2" 
-                                    color={trade.profit >= 0 ? 'success.main' : 'error.main'}
-                                >
+                                <TableCell align="right">
+                                    <Typography variant="body2"
+                                        color={trade.profit >= 0 ? 'success.main' : 'error.main'}>
                                         ${trade.profit.toFixed(2)}
                                     </Typography>
                                 </TableCell>
                                 <TableCell>
-                                    <Typography variant="body2" 
-                                        color={trade.status === 'OPEN' ? 'primary' : 'text.secondary'}
-                                    >
+                                    <Typography variant="body2"
+                                        color={trade.status === 'OPEN' ? 'primary' : 'text.secondary'}>
                                         {trade.status}
                                     </Typography>
                                 </TableCell>
                                 <TableCell>
-                                    <Typography variant="body2" 
-                                        color={trade.signal === 1 ? 'success.main' : trade.signal === -1 ? 'error.main' : 'text.secondary'}
-                                    >
-                                        {trade.signal === 1 ? 'Buy' : trade.signal === -1 ? 'Sell' : 'None'}
+                                    <Typography variant="body2"
+                                        color={trade.signal === 1 ? 'success.main' :
+                                            trade.signal === -1 ? 'error.main' : 'text.secondary'}>
+                                        {trade.signal === 1 ? 'Buy' :
+                                            trade.signal === -1 ? 'Sell' : 'None'}
                                     </Typography>
                                 </TableCell>
                                 <TableCell>
@@ -138,26 +128,21 @@ export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
                 </Table>
             </TableContainer>
 
-            {/* Popup Dialog for TOS Code */}
-            <Dialog open={open} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-                <DialogTitle>TOS</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        fullWidth
-                        multiline
-                        rows={8}
-                        variant="outlined"
-                        value={tosCode}
-                        onChange={(e) => setTosCode(e.target.value)}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCopyCode} startIcon={<ContentCopyIcon />}>
-                        Copy to Clipboard
-                    </Button>
-                    <Button onClick={handleCloseDialog}>Close</Button>
-                </DialogActions>
-            </Dialog>
+            {/* Snackbar */}
+            <Snackbar
+                open={snackbarOpen}
+                autoHideDuration={3000}
+                onClose={handleCloseSnackbar}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            >
+                <Alert
+                    onClose={handleCloseSnackbar}
+                    severity={snackbarSeverity}
+                    sx={{ width: '100%' }}
+                >
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
         </Paper>
     );
 };

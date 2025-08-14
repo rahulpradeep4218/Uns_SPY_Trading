@@ -1,10 +1,7 @@
 import base64
-from multiprocessing import connection
-from tracemalloc import stop
 import requests
-from inference.backend.app.api.routes import schwab
 from ruamel.yaml import YAML
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import pandas as pd
 from dateutil import tz
@@ -18,6 +15,8 @@ from sqlalchemy import func
 import logging
 from time import time
 from zoneinfo import ZoneInfo
+import json
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +305,7 @@ async def get_schwab_connection_info_from_db(symbol: str) -> dict:
     db: Session = SessionLocal()
     connection_info = db.query(RealtimeData).filter(RealtimeData.symbol == symbol).first()
     if not connection_info:
+        db.close()
         return {"status": "ERROR", "message": "No RealtimeData Record found in DB."}
     time_val = connection_info.time
     realtime_sync_time = connection_info.realtime_last_sync_time
@@ -314,9 +314,12 @@ async def get_schwab_connection_info_from_db(symbol: str) -> dict:
     realtime_sync_time_str = await get_est_string_for_utc_time(realtime_sync_time)
     history_sync_time_str = await get_est_string_for_utc_time(history_sync_time)
     schwab_config = get_schwab_config()
-    realtime_enabled = schwab_config.get("enable_realtime", 0)
-    realtime_enabled = 'True' if realtime_enabled else 'False'
+    realtime_enabled = "Yes" if schwab_config.get("enable_realtime", 0) else "No"
+    realtime_account_enabled = "Yes" if schwab_config.get("enable_realtime_account", 0) else "No"
+
     reauth_link = await get_schwab_url_for_auth_code(schwab_config)
+    reauth_link_account = await get_schwab_url_for_auth_code_account(schwab_config)
+    db.close()
     return {
         "status": "SUCCESS",
         "symbol": symbol,
@@ -324,7 +327,9 @@ async def get_schwab_connection_info_from_db(symbol: str) -> dict:
         "last_realtime_sync": realtime_sync_time_str,
         "last_history_sync": history_sync_time_str,
         "sync_enabled": realtime_enabled,
-        "reauth_link": reauth_link
+        "sync_account_enabled": realtime_account_enabled,
+        "reauth_link": reauth_link,
+        "reauth_link_account": reauth_link_account
     }
 
 
@@ -401,6 +406,7 @@ async def handle_schwab_account_connection_error(response, schwab_config: dict):
         if connection_status.get("status", "") == "UPDATE_REFRESH_TOKEN":
             logger.error("Refresh token needs to be updated, so disabling realtime temporarily. To enable back, update in config")
             update_schwab_config("enable_realtime_account", 0)
+    return connection_status
 
 
 async def get_realtime_quote(symbol: str, schwab_config: dict) -> dict:
@@ -437,9 +443,37 @@ async def get_realtime_quote(symbol: str, schwab_config: dict) -> dict:
 async def get_realtime_price_from_db(db: Session, symbol: str):
     realtime_row = db.query(RealtimeData).filter(RealtimeData.symbol == symbol).first()
     if not realtime_row:
+        logger.error(f"No real-time data found for symbol {symbol} in the database.")
         return None
     price = realtime_row.price
     return price
+
+
+
+async def get_option_symbol(symbol: str, option_type: str, entry_price: float, tos_config) -> str:
+    # Construct the option symbol based on the underlying symbol
+    position_size = tos_config.get('position_size')
+    manual_exp = tos_config.get('exp_date_manual', None)
+    if manual_exp:
+        exp_date = datetime.strptime(manual_exp, "%Y-%m-%d")
+    else:
+        days_to_add = tos_config.get('exp_days_increment')
+        exp_date = datetime.now() + timedelta(days=days_to_add)
+    exp_date_str = exp_date.strftime("%y%m%d")  # YYMMDD format
+    option_code = "C" if option_type.upper() == "CALL" else "P"
+    strike_increment = tos_config.get('strike_otm_increment')
+
+    if option_type.upper() == "CALL":
+        strike_price = math.ceil(entry_price + strike_increment)
+    else:  # Sell signal
+        strike_price = math.floor(entry_price - strike_increment)
+
+    # Schwab expects strike * 1000 encoded as 8 digits
+    strike_thousand = int(round(strike_price * 1000))   # e.g. 631 -> 631000
+    strike_field = f"{strike_thousand:08d}"                # zero-pad to 8 digits
+
+    return f"{symbol}   {exp_date_str}{option_code}{strike_field}"
+
 
 
 async def parse_option_symbol(symbol: str) -> dict:
@@ -486,6 +520,17 @@ async def get_schwab_orders_df(schwab_config: dict) -> pd.DataFrame:
     """
     Fetch all Schwab orders and return as a DataFrame.
     """
+
+    def get_price(order):
+        try:
+            return (
+                order.get("orderActivityCollection", [])[0]
+                    .get("executionLegs", [])[0]
+                    .get("price")
+            )
+        except (IndexError, AttributeError):
+            return None  # or np.nan
+        
     access_token_account = schwab_config.get("access_token_account")
     account_id = schwab_config.get("encrypted_account_id")
     account_url = schwab_config.get("account_data_url", "")
@@ -494,17 +539,26 @@ async def get_schwab_orders_df(schwab_config: dict) -> pd.DataFrame:
         "accept": "application/json"
     }
     orders_url = f"{account_url}/{account_id}/orders"
+    logger.info(f"Fetching orders from Schwab API using URL: {orders_url}")
+    to_time = datetime.now(timezone.utc)
+    from_time = to_time - timedelta(days=100)
+    from_entered_time = from_time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    to_entered_time = to_time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     params = {
+        "fromEnteredTime": from_entered_time,
+        "toEnteredTime": to_entered_time,
         "maxResults": 100
     }
     response = requests.get(url=orders_url, headers=headers, params=params)
-    if response.status_code != 200 or response.status_code != 201:
+    if response.status_code != 200 and response.status_code != 201:
         await handle_schwab_account_connection_error(response, schwab_config)
         return pd.DataFrame()
-    logger.info(f"Fetched {len(response.json().get('orders', []))} orders from Schwab API.")
+    logger.info(f"Fetched {len(response.json())} orders from Schwab API.")
 
     orders_data = response.json()
-    return pd.DataFrame(orders_data)
+    orders_data_df = pd.DataFrame(orders_data)
+    orders_data_df["options_price"] = [get_price(order) for order in orders_data]
+    return orders_data_df
 
 
 async def sync_realtime_price_history(
@@ -515,6 +569,7 @@ async def sync_realtime_price_history(
     periodDays = schwab_config.get("realtime_period_days", 1)
     if not access_token:
         print("Access token is missing.")
+        db.close()
         return pd.DataFrame()
     print("Period days : ", periodDays)
     res = await get_price_history(
@@ -530,6 +585,7 @@ async def sync_realtime_price_history(
     if res.status_code != 200:
         logger.error(f"Error fetching price history: HTTP {res.status_code}")
         await handle_schwab_connection_error(res, schwab_config)
+        db.close()
         return pd.DataFrame()
 
     data = res.json()
@@ -575,6 +631,7 @@ async def sync_realtime_price_history(
 
     db.execute(stmt)
     db.commit()
+    db.close()
     return first_record_time
 
 
@@ -642,6 +699,7 @@ async def schwab_data_backend_update(symbol: str):
     realtime_record = db.query(RealtimeData).filter(RealtimeData.symbol == symbol).first()
     if not realtime_record:
         logger.error(f"No realtime data found in the database for the symbol: {symbol}")
+        db.close()
         return
 
     schwab_config = inf_config['inference']['schwab']
@@ -655,6 +713,7 @@ async def schwab_data_backend_update(symbol: str):
             schwab_config=inf_config['inference']['schwab']
         )
         if not realtime_res:
+            db.close()
             return
         schwab_time_utc = datetime.fromtimestamp(realtime_res['time'] / 1000, tz=timezone.utc)
         schwab_rounded_time = await round_to_next_minute(schwab_time_utc)
@@ -688,13 +747,224 @@ async def schwab_data_backend_update(symbol: str):
         realtime_record.history_last_sync_time = datetime.now(timezone.utc)
         db.commit()
         db.refresh(realtime_record)
+    
+    db.close()
+
+
+async def get_open_positions_info(schwab_config: dict, symbol: str, retries: int = 1) -> dict:
+    """
+    Fetch open positions for a given symbol from Schwab API.
+    Returns a dict with position details.
+    """
+    access_token_account = schwab_config.get("access_token_account")
+    account_id = schwab_config.get("encrypted_account_id")
+    account_url = schwab_config.get("account_data_url", "")
+    headers = {
+        "Authorization": f"Bearer {access_token_account}",
+        "accept": "application/json"
+    }
+    
+    accounts_positions_url = f"{account_url}/{account_id}"
+    params = {
+        "fields": "positions"
+    }
+    
+    response = requests.get(url=accounts_positions_url, headers=headers, params=params)
+    
+    if response.status_code != 200:
+        conn_status = await handle_schwab_account_connection_error(response, schwab_config)
+        if conn_status.get("status", "") != "SUCCESS":
+            logger.error("Not able to connect to Schwab API for account info, message: %s", conn_status.get("message", ""))
+            return {'status': 'FAILED', 'message': conn_status.get("message", "")}
+        else:
+            if retries <= 0:
+                logger.error("Max retries reached. Unable to fetch Schwab account positions.")
+                return {'status': 'FAILED', 'message': "Max retries reached. Unable to fetch Schwab account positions." }
+            else:
+                logger.info("Retrying to fetch Schwab account positions...")
+                return await get_open_positions_info(schwab_config, symbol, retries=retries-1)
+
+    positions_data = response.json().get('securitiesAccount', {}).get('positions', [])
+    
+    if len(positions_data) > 0:
+        position_row = next((pos for pos in positions_data if pos['instrument']['symbol'] == symbol), None)
+        if position_row:
+            return {
+                'symbol': symbol,
+                'positions': position_row['longQuantity'],
+                'profit': position_row['longOpenProfitLoss'],
+                'status': 'SUCCESS'
+            }
+    return {
+            "symbol": symbol, 
+            "positions": 0,
+            "profit": 0,
+            "status": "SUCCESS"
+        }
+
+
+async def close_schwab_order_db(order_id: str, schwab_config: dict, db: Session, option_price: float, close_order_id: str = None, reason: str = ""):
+    order = db.query(SchwabOrders).filter(SchwabOrders.open_order_id == order_id).first()
+    cancel_reasons = schwab_config['cancel_status'].split(",")
+    if order:
+        order.closed = True
+        current_notes = order.notes or ""
+        order.close_time = datetime.now(ZoneInfo("America/New_York"))
+        if reason == "FILLED":
+            logger.info(f"Closing Schwab order {order_id} in the database as FILLED")
+            order.close_status = "FILLED"
+            order.close_order_id = close_order_id
+            option_details = await parse_option_symbol(order.symbol)
+            underlying_symbol = option_details['underlying']
+            current_price = await get_realtime_price_from_db(db, underlying_symbol)
+            order.close_price = current_price
+            order.option_exit_price = option_price
+            option_entry_price = order.option_entry_price
+            profit = (order.option_exit_price - option_entry_price) * order.quantity * 100
+            order.profit = profit
+            current_notes += f"\nOrder closed as FILLED at {order.close_time} with price {current_price}."
+            order.notes = current_notes
+        elif reason in cancel_reasons:
+            logger.info(f"Closing Schwab order {order_id} in the database as reason: {reason}")
+            order.close_status = reason
+            current_notes += f"\nOrder set to closed as {reason} at {order.close_time}."
+            order.notes = current_notes
+        
+        db.commit()
+        db.refresh(order)
+
+        logger.info(f"Schwab order {order_id} closed successfully.")
+    else:
+        logger.error(f"Schwab order {order_id} not found.")
 
 
 
-async def check_schwab_orders(db: Session, symbol: str):
+async def create_schwab_order(order: dict, type: str = "BUY_TO_OPEN"):
+    """
+    Creates a new Schwab order using Schwab API
+    """
+    max_tries = 2
     schwab_config = get_schwab_config()
-    schwab_orders_df = await get_schwab_orders_df(schwab_config=schwab_config)
+    error_messages = ""
+    for attempt in range(max_tries):
+        access_token_account = schwab_config.get("access_token_account")
+        account_id = schwab_config.get("encrypted_account_id")
+        account_url = schwab_config.get("account_data_url", "")
+        headers = {
+            "Authorization": f"Bearer {access_token_account}",
+            "Content-Type": "application/json"
+        }
 
+        #### If type is sell to close, then need to check if position exists
+        if type == "SELL_TO_CLOSE":
+            open_positions_info = await get_open_positions_info(schwab_config, order["symbol"])
+            if open_positions_info.get("status", "") != "SUCCESS":
+                logger.error("Failed to retrieve open positions info.")
+                return {"status": "FAILED", "message": f"Failed to retrieve open positions info message: {open_positions_info.get('message', '')}"}
+            if open_positions_info.get("positions", 0) < order["quantity"]:
+                logger.error(f"Not enough position to sell {order['quantity']} of {order['symbol']}. Available: {open_positions_info.get('positions', 0)}")
+                return {"status": "POSITION_NOT_AVAILABLE", "message": f"Not enough position to sell {order['quantity']} of {order['symbol']}. Available: {open_positions_info.get('positions', 0)}"}
+        orders_url = f"{account_url}/{account_id}/orders"
+        order_strategy = {
+            "orderStrategyType": "SINGLE",
+            "orderType": "MARKET",
+            "session": "NORMAL",
+            "duration": "DAY",
+            "orderLegCollection": [
+                {
+                "instruction": type,
+                "quantity": order["quantity"],
+                    "instrument": {
+                        "symbol": order["symbol"],
+                        "assetType": "OPTION"
+                    }
+                }
+            ]
+        }
+        response = requests.post(
+                url=orders_url, 
+                headers=headers, 
+                data=json.dumps(order_strategy)
+            )
+        if response.status_code != 200 and response.status_code != 201:
+            conn_status = await handle_schwab_account_connection_error(response, schwab_config)
+            if conn_status.get("status", "") != "SUCCESS":
+                msg = f"Not able to connect to Schwab account API, message: {conn_status.get('message', '')}, attempt: {attempt + 1}"
+                logger.error(msg)
+                error_messages += msg + " | \n "
+                break
+            else:
+                logger.info("Retrying to create Schwab order...")
+                continue
+        else:
+            logger.info(f"Successfully created Schwab order: {order['symbol']} of type {type}")
+
+            orders_data = response.headers
+            order_id = orders_data.get('Location', '').split('/')[-1]
+            return {"status": "SUCCESS", "order_id": order_id}
+        
+    return {"status": "FAILED", "message": error_messages}
+
+
+
+
+async def insert_new_schwab_order_db(symbol: str, option_type: str, db: Session, take_profit: float = 0.0, stop_loss: float = 0.0):
+    current_price = await get_realtime_price_from_db(db, symbol)
+    tos_config = get_inf_config()['inference']['tos']
+    option_symbol = await get_option_symbol(
+        symbol=symbol,
+        option_type=option_type,       
+        entry_price=current_price,
+        tos_config=tos_config
+    )
+    logger.info(f"Creating new Schwab order for symbol: {symbol}, option type: {option_type}, option symbol: {option_symbol}, current price: {current_price}")
+    order_dict = {
+        "symbol": option_symbol,
+        "quantity": tos_config.get('position_size', 1),
+        "price": current_price
+    }
+    new_schwab_order_res = await create_schwab_order(order=order_dict, type="BUY_TO_OPEN")
+    if new_schwab_order_res.get("status", "") == "SUCCESS":
+        new_order_id = new_schwab_order_res.get("order_id", "")
+        new_order_db = SchwabOrders(
+            open_order_id=new_order_id,
+            symbol=option_symbol,
+            open_time=datetime.now(ZoneInfo("America/New_York")),
+            quantity=tos_config.get('position_size', 1),
+            take_profit=take_profit,
+            stop_loss=stop_loss,
+            entry_price=current_price,
+            open_status="PENDING",
+            profit=0.0
+        )
+        db.add(new_order_db)
+        db.commit()
+        db.refresh(new_order_db)
+        return {"status": "SUCCESS", "order_id": new_order_id, "message": "Order created successfully."}
+    return {
+        "status": "FAILED", 
+        "message": new_schwab_order_res.get("message", "Failed to create Schwab order.")
+    }
+
+
+
+
+async def check_schwab_orders(symbol: str):
+
+    db: Session = SessionLocal()
+    schwab_config = get_schwab_config()
+    if not schwab_config['enable_realtime_account']:
+        logger.info("Realtime account data sync is disabled in the configuration.")
+        db.close()
+        return
+    cancel_statuses = schwab_config['cancel_status'].split(",")
+    schwab_orders_df = await get_schwab_orders_df(schwab_config=schwab_config)
+    if schwab_orders_df.empty:
+        logger.info("No Schwab orders data fetched from API.")
+        db.close()
+        return
+    else:
+        logger.info(f"List of orders from schwab API : {schwab_orders_df[['orderId', 'status', 'options_price']].to_dict(orient='records')}")
     open_schwab_orders = (
         db.query(SchwabOrders)
         .filter(
@@ -703,36 +973,98 @@ async def check_schwab_orders(db: Session, symbol: str):
         .all()
     )
     for order in open_schwab_orders:
-        order_row = schwab_orders_df[schwab_orders_df['orderId'] == order.open_order_id]
+
+        order_row = schwab_orders_df[schwab_orders_df['orderId'] == int(order.open_order_id)]
         if not order_row.empty:
             order_row = order_row.iloc[0]
-            order.open_status = order_row['status']
+            #order.open_status = order_row['status']
+
+            if order.open_status == "PENDING":
+                logger.info("checking if open order is filled")
+                if order_row['status'] == "FILLED":
+                    logger.info(f"Open order {order.open_order_id} is filled. Updating the order in DB.")
+                    order.open_status = "FILLED"
+                    order.option_entry_price = float(order_row['options_price']) if pd.notna(order_row['options_price']) else 0
+                    db.commit()
+
+            elif order.close_status == "PENDING":
+                close_order_row = schwab_orders_df[schwab_orders_df['orderId'] == order.close_order_id]
+                if not close_order_row.empty:
+                    close_order_row = close_order_row.iloc[0]
+                    close_status = close_order_row['status']
+                    if close_status == "FILLED":
+                        logger.info(f"Close order {order.close_order_id} is filled. Updating the order in DB.")
+                        await close_schwab_order_db(
+                            order_id=order.id, 
+                            schwab_config=schwab_config, 
+                            db=db, 
+                            option_price=float(order_row['options_price']) if pd.notna(order_row['options_price']) else 0, 
+                            close_order_id=order.close_order_id, 
+                            reason="FILLED"
+                        )
+                else:
+                    logger.warning(f"Close order {order.close_order_id} not found in Schwab orders data.")
+                    order.notes = order.notes + f"| Close order : {order.close_order_id} not found in Schwab orders data."
+                    db.commit()
             
-            if order_row['status'] == 'FILLED':
+            elif order_row['status'] == 'FILLED':
                 option_details = await parse_option_symbol(order.symbol)
                 option_type = option_details['type']
-                
-                logger.info(f"Order {order.open_order_id} is filled. checking condition to close order")
-                current_price = await get_realtime_price_from_db(db, symbol)
-                take_profit_reached = current_price > order.take_profit if option_type == "CALL" else current_price < order.take_profit
-                stop_loss_reached = current_price < order.stop_loss if option_type == "CALL" else current_price > order.stop_loss
-                if take_profit_reached or stop_loss_reached:
-                    if stop_loss_reached:
-                        
-                        logger.info(f"Order {order.open_order_id} hit stop loss. Closing the order.")
-                    elif take_profit_reached:
-                        logger.info(f"Order {order.open_order_id} hit take profit. Closing the order.")
+                logger.info(f"Filled, option details : {option_details}")
 
-                order.close_time = datetime.now(timezone.utc)
-                order.close_price = order_row['averagePrice']
-                db.commit()
-            elif order_row['status'] == 'CANCELED':
-                logger.info(f"Order {order.open_order_id} is canceled. Closing the order in the database.")
-                order.closed = True
-                order.close_time = datetime.now(timezone.utc)
-                db.commit()
+                logger.info(f"Order {order.open_order_id} is filled. checking condition to close order")
+                for _ in range(3):
+                    current_price = await get_realtime_price_from_db(db, symbol)
+                    if current_price:
+                        break
+                if current_price:
+                    take_profit_reached = current_price > order.take_profit if option_type == "CALL" else current_price < order.take_profit
+                    stop_loss_reached = current_price < order.stop_loss if option_type == "CALL" else current_price > order.stop_loss
+                    logger.debug(f"Current price for {symbol} is {current_price}, take profit: {order.take_profit}, stop loss: {order.stop_loss}")
+                    logger.debug(f"Take profit reached: {take_profit_reached}, Stop loss reached: {stop_loss_reached}")
+                    if take_profit_reached or stop_loss_reached:
+                        msg_keyword = "take profit" if take_profit_reached else "stop loss"
+                        target_val = order.take_profit if take_profit_reached else order.stop_loss
+                        logger.info(f"Order {order.open_order_id} hit {msg_keyword}, current price : {current_price} crossed {target_val}. Closing the order.")
+                        order_dict = {
+                            "symbol": order.symbol,
+                            "quantity": order.quantity,
+                            "price": current_price,
+                        }
+                        close_order_response = await create_schwab_order(order=order_dict, type="SELL_TO_CLOSE")
+                        if close_order_response.get("status", "") == "SUCCESS":
+                            close_order_id = close_order_response.get("order_id", "")
+                            order.close_order_id = close_order_id
+                            order.close_status = "PENDING"
+                            order.notes = order.notes + f"| {msg_keyword.capitalize()} hit at {current_price}. Closing order with ID: {close_order_id}."                       
+                            db.commit()
+                        elif close_order_response.get("status", "") == "POSITION_NOT_AVAILABLE":
+                            logger.info(f"As position not available to close order {order.open_order_id}, marking it closed in DB.")
+                            order.close_status = "POS_NOT_AVLBL"
+                            order.closed = True
+                            order.close_time = datetime.now(ZoneInfo("America/New_York"))
+                            order.notes = order.notes + f"| {msg_keyword.capitalize()} hit at {current_price}. But position not available to close the order. Marking it closed."                       
+                            db.commit()
+                        else:
+                            order.notes = order.notes + "| Not able to insert a close order after " + msg_keyword + " hit, error : " + close_order_response.get("message", "")
+                            db.commit()
+                    
+                else:
+                    logger.error(f"Failed to fetch current price for symbol {symbol}. Cannot determine if order should be closed.")
+                    order.notes = order.notes + "| Failed to fetch current price for symbol " + symbol + ". Cannot determine if order should be closed."
+                    db.commit()
+
+            elif order_row['status'] in cancel_statuses:
+                await close_schwab_order_db(
+                    order_id=order.open_order_id, 
+                    schwab_config=schwab_config, 
+                    db=db, 
+                    option_price=0, 
+                    reason=order_row['status']
+                )
         else:
             logger.warning(f"Order {order.open_order_id} not found in Schwab orders data.")
+    db.close()
 
 
 

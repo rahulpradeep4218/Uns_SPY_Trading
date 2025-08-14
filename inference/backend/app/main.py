@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.api.routes import router as api_router
 from fastapi.middleware.cors import CORSMiddleware
-from app.methods.schwab_methods import schwab_data_backend_update, get_inf_config
+from app.methods.schwab_methods import schwab_data_backend_update, get_inf_config, check_schwab_orders
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 import logging
@@ -17,12 +17,14 @@ logger = logging.getLogger("Realtime sync")
 # for path in sys.path:
 #     print(path)
 
-print("== File system check ==")
-print("Exists", os.path.exists("/usr/local/lib/python3.10/site-packages/trading_functions"))
+
+SERVICE_MODE = os.getenv("SERVICE_MODE", "api")
+#print("== File system check ==")
+#print("Exists", os.path.exists("/usr/local/lib/python3.10/site-packages/trading_functions"))
 
 
-
-scheduler = AsyncIOScheduler()
+if SERVICE_MODE == "worker":
+    scheduler = AsyncIOScheduler()
 
 origins = [
     "http://localhost:3002",
@@ -43,31 +45,40 @@ def job_listener(event):
     else:
         logger.info(f"Job {event.job_id} completed successfully.")
 
-scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+async def single_job_to_run(symbol: str):
+    logger.info("Starting the single job")
+    await schwab_data_backend_update(symbol=symbol)
+    await check_schwab_orders(symbol=symbol)
+
+if SERVICE_MODE == "worker":
+    scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    conf = get_inf_config()
-    realtime_job_frequency = conf['inference']['schwab']['realtime_job_frequency']
-    logger.info("Starting the scheduler...")
 
-    scheduler.add_job(
-        schwab_data_backend_update,
-        'interval',
-        seconds=int(realtime_job_frequency),
-        id='realtime_sync_job',
-        replace_existing=True,
-        max_instances=1,
-        kwargs={
-            'symbol': 'SPY'
-        }
-    )
-    scheduler.start()
+    if SERVICE_MODE == "worker":
+        conf = get_inf_config()
+        realtime_job_frequency = conf['inference']['schwab']['realtime_job_frequency']
+        logger.info("Starting the scheduler...")
+
+        scheduler.add_job(
+            single_job_to_run,
+            'interval',
+            seconds=int(realtime_job_frequency),
+            id='realtime_sync_job',
+            replace_existing=False,
+            max_instances=1,
+            kwargs={
+                'symbol': 'SPY'
+            }
+        )
+
+        scheduler.start()
 
     yield
-
-    logger.info("Shutting down the scheduler...")
-    scheduler.shutdown(wait=True)
+    if SERVICE_MODE == "worker":
+        logger.info("Shutting down the scheduler...")
+        scheduler.shutdown(wait=True)
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(

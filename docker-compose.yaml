@@ -154,13 +154,39 @@ services:
       INF_POSTGRES_DB: ${INF_POSTGRES_DB}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT}
+      SERVICE_MODE: api
     networks:
       - app_network
     volumes:
       - mlflow_artifacts:/mlflow/artifacts  # Mount shared MLflow artifacts volume
       - data_volume:${DATA_CONTAINER_PATH}  # Mount shared data volume
       - config_volume:/app/config  # Mount shared config.yaml
-      
+    
+  inf_backend_job:
+    build:
+      context: .
+      dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_inf_backend_job
+      args:
+        DAGSTER_TRADING_FUNCTIONS_PATH: ${DAGSTER_TRADING_FUNCTIONS_PATH}
+    container_name: inf_backend
+    image: inf_backend_image
+    expose:
+      - "${INFERENCE_BACKEND_PORT}"
+    environment:
+      CONFIG_PATH: ${CONFIG_CONTAINER_PATH}
+      EXCEL_OHLC_DATA_PATH: ${DATA_CONTAINER_PATH}/SPY_AllData.xlsx
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      INF_POSTGRES_DB: ${INF_POSTGRES_DB}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      SERVICE_MODE: worker
+    networks:
+      - app_network
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts  # Mount shared MLflow artifacts volume
+      - data_volume:${DATA_CONTAINER_PATH}  # Mount shared data volume
+      - config_volume:/app/config  # Mount shared config.yaml
 
   inf_frontend:
     build:

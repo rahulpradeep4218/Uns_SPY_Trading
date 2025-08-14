@@ -93,3 +93,4 @@ class SchwabOrders(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
     closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[Optional[str]] = mapped_column(String, default="")  # Additional notes for the order
