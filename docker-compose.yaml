@@ -168,10 +168,10 @@ services:
       dockerfile: ${DOCKER_FILES_DIRECTORY}/Dockerfile_inf_backend_job
       args:
         DAGSTER_TRADING_FUNCTIONS_PATH: ${DAGSTER_TRADING_FUNCTIONS_PATH}
-    container_name: inf_backend
+    container_name: inf_backend_job
     image: inf_backend_image
     expose:
-      - "${INFERENCE_BACKEND_PORT}"
+      - "${INFERENCE_BACKEND_JOB_PORT}"
     environment:
       CONFIG_PATH: ${CONFIG_CONTAINER_PATH}
       EXCEL_OHLC_DATA_PATH: ${DATA_CONTAINER_PATH}/SPY_AllData.xlsx
