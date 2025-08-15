@@ -828,7 +828,7 @@ async def close_schwab_order_db(order_id: str, schwab_config: dict, db: Session,
             current_notes += f"\nOrder closed as FILLED at {order.close_time} with price {current_price}."
             order.notes = current_notes
         elif reason in cancel_reasons:
-            logger.info(f"Closing Schwab order {order_id} in the database as reason: {reason}")
+            logger.info(f"Closing Schwab order {order_id} in the database as the order is cancelled in schwab,  reason: {reason}")
             order.close_status = reason
             current_notes += f"\nOrder set to closed as {reason} at {order.close_time}."
             order.notes = current_notes
@@ -989,6 +989,15 @@ async def check_schwab_orders(symbol: str):
                     order.open_status = "FILLED"
                     order.option_entry_price = float(order_row['options_price']) if pd.notna(order_row['options_price']) else 0
                     db.commit()
+                elif order_row['status'] in cancel_statuses:
+                    logger.info(f"Open order {order.open_order_id} is cancelled. Updating the order in DB.")
+                    await close_schwab_order_db(
+                        order_id=order.open_order_id, 
+                        schwab_config=schwab_config, 
+                        db=db, 
+                        option_price=0, 
+                        reason=order_row['status']
+                    )
 
             elif order.close_status == "PENDING":
                 close_order_row = schwab_orders_df[schwab_orders_df['orderId'] == order.close_order_id]
