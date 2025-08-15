@@ -169,7 +169,7 @@ services:
       args:
         DAGSTER_TRADING_FUNCTIONS_PATH: ${DAGSTER_TRADING_FUNCTIONS_PATH}
     container_name: inf_backend_job
-    image: inf_backend_image
+    image: inf_backend_job_image
     expose:
       - "${INFERENCE_BACKEND_JOB_PORT}"
     environment:
