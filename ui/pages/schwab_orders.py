@@ -117,13 +117,13 @@ db: Session = SessionLocal()
 # ----------------------
 with col1:
     orders_df = get_orders_from_db(db)
-    orders_df['open_order_id'] = orders_df['open_order_id'].astype(int)
+    
 
     if orders_df.empty:
         st.warning("No orders found in database.")
     else:
         st.subheader("Orders List")
-
+        orders_df['open_order_id'] = orders_df['open_order_id'].astype(int)
         available_ids = orders_df["open_order_id"].astype(int).tolist()
 
         # Ensure selection is valid

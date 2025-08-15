@@ -55,7 +55,6 @@ class TradeRecord(Base):
     calc_take_profit: Mapped[Optional[float]] = mapped_column(Float, default=None)
     profit: Mapped[float] = mapped_column(Float, default=0.0)
     exit_reason: Mapped[Optional[str]] = mapped_column(String, default=None)  # e.g., "stop_loss", "take_profit", "max_hold_time"
-    realtime_trade_id: Mapped[Optional[str]] = mapped_column(String, default=None)  # ID for real-time trades
 
     session: Mapped["TradeSession"] = relationship("TradeSession", back_populates="trade_records")
     ohlc_data: Mapped[Optional["PriceData"]] = relationship("PriceData", viewonly=True,
