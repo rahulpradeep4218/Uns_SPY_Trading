@@ -459,6 +459,9 @@ async def get_option_symbol(symbol: str, option_type: str, entry_price: float, t
     else:
         days_to_add = tos_config.get('exp_days_increment')
         exp_date = datetime.now() + timedelta(days=days_to_add)
+        # If expiration falls on weekend, move to next Monday
+        while exp_date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+            exp_date += timedelta(days=1)
     exp_date_str = exp_date.strftime("%y%m%d")  # YYMMDD format
     option_code = "C" if option_type.upper() == "CALL" else "P"
     strike_increment = tos_config.get('strike_otm_increment')
