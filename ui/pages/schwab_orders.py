@@ -1,3 +1,4 @@
+from pyparsing import annotations
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -6,7 +7,6 @@ from trading_functions.db.models import SchwabOrders, RealtimeData, PriceData
 from trading_functions.db.session import SessionLocal
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from streamlit_autorefresh import st_autorefresh
 import logging
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -14,10 +14,6 @@ from zoneinfo import ZoneInfo
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Schwab Orders Tracker")
 
-# ----------------------
-# AUTO-REFRESH
-# ----------------------
-st_autorefresh(interval=5000, key="refresh_orders")
 
 # ----------------------
 # DB FUNCTIONS
@@ -98,10 +94,10 @@ def get_orders_from_db(db: Session):
 # ----------------------
 if "selected_order_id" not in st.session_state:
     st.session_state.selected_order_id = None
-if "max_price" not in st.session_state:
-    st.session_state.max_price = None
-if "min_price" not in st.session_state:
-    st.session_state.min_price = None
+if "price_history" not in st.session_state:
+    st.session_state.price_history = []
+if "fig" not in st.session_state:
+    st.session_state.fig = None
 
 # ----------------------
 # PAGE LAYOUT
@@ -140,8 +136,8 @@ with col1:
 
         if selected_id != st.session_state.selected_order_id:
             st.session_state.selected_order_id = selected_id
-            st.session_state.max_price = None
-            st.session_state.min_price = None
+            st.session_state.price_history = [] # reset history
+            st.session_state.fig = None
 
 # ----------------------
 # RIGHT COLUMN: Order Details + Graph
@@ -158,30 +154,47 @@ with col2:
             if not order['closed']:
                 prices = get_prices_from_db(order=order, db=db)
                 if prices["current_price"] is not None:
-                    st.session_state.max_price = prices["max_price"]
-                    st.session_state.min_price = prices["min_price"]
+                    st.session_state.price_history.append({
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "current_price": prices["current_price"],
+                    })
 
-                    fig = go.Figure()
+                    st.session_state.fig = None                    
+                
+                    st.session_state.fig = go.Figure()
 
-                    fig.add_trace(go.Scatter(
-                        x=[time.strftime("%H:%M:%S")],
-                        y=[prices["current_price"]],
-                        mode="markers+text",
-                        text=[f"${prices['current_price']}"],
-                        textposition="top center",
-                        name="Current Price"
-                    ))
+                    history_df = pd.DataFrame(st.session_state.price_history)
 
-                    fig.add_hline(y=order['take_profit'], line_dash="dash", line_color="green", annotation_text="Take Profit")
-                    fig.add_hline(y=order['stop_loss'], line_dash="dash", line_color="red", annotation_text="Stop Loss")
-                    fig.add_hline(y=st.session_state.max_price, line_dash="dot", line_color="blue", annotation_text="Max Price")
-                    fig.add_hline(y=st.session_state.min_price, line_dash="dot", line_color="orange", annotation_text="Min Price")
+                    # Remove old shapes
+                    st.session_state.fig.update_layout(shapes=[], annotations=[])                  
+                    st.session_state.fig.data = []
 
-                    fig.update_layout(yaxis_title="Price", xaxis_title="Time", title="Order Price Tracking", height=400)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.session_state.fig.add_hline(y=order['take_profit'], line_dash="dash", line_color="green", annotation_text="Take Profit")
+                    st.session_state.fig.add_hline(y=order['stop_loss'], line_dash="dash", line_color="red", annotation_text="Stop Loss")
+                    st.session_state.fig.add_scatter(
+                        x = history_df['time'],
+                        y = history_df['current_price'],
+                        mode='lines+markers',
+                        name='Current Price',
+                    )
+                    
+                    st.session_state.fig.add_hline(y=prices["max_price"], line_dash="dot", line_color="blue", annotation_text="Max Price")
+                    st.session_state.fig.add_hline(y=prices["min_price"], line_dash="dot", line_color="orange", annotation_text="Min Price")
+
+                    st.session_state.fig.update_layout(
+                        yaxis_title="Price",
+                        xaxis_title="Time",
+                        title=f"Order Price Tracking for {order['symbol']}",
+                        height=400
+                    )
+
+                    chart_placeholder = st.empty()
+                    chart_placeholder.plotly_chart(st.session_state.fig, use_container_width=True)
+
+                    #refresh every 5 seconds
+                    time.sleep(5)
+                    st.rerun()
                 else:
-                    st.warning("Price data unavailable.")
-        else:
-            st.warning("Selected order not found. It may have been closed.")
+                    st.warning("Price data unavailable. Please check your connection or data source.")
 
 db.close()
