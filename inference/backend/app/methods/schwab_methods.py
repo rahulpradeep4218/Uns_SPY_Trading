@@ -1000,7 +1000,7 @@ async def check_schwab_orders(symbol: str):
                     )
 
             elif order.close_status == "PENDING":
-                close_order_row = schwab_orders_df[schwab_orders_df['orderId'] == order.close_order_id]
+                close_order_row = schwab_orders_df[schwab_orders_df['orderId'] == int(order.close_order_id)]
                 if not close_order_row.empty:
                     close_order_row = close_order_row.iloc[0]
                     close_status = close_order_row['status']
