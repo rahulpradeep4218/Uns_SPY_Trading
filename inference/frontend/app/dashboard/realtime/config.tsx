@@ -26,6 +26,8 @@ export default function RealtimeConfig() {
         tradeRecords,
         setTradeRecords,
         candleDataSeriesRef,
+        buyTakeProfitRef,
+        sellTakeProfitRef,
         sciChartSurfaceRef,
         tradeMarkerMapRef,
         isRealtime,
@@ -82,6 +84,7 @@ export default function RealtimeConfig() {
                     const trade_stats = res_data.trade_stats;
                     const trade_records = res_data.trades;
                     const last_trade_signal_time = res_data.last_trade_signal_time;
+                    const take_profits = res_data.take_profits;
                     console.log("Fetched session details:", session_record);
                     setModelHighAlias(session_record.model_high_alias);
                     console.log("Setting model_high_alias to:", session_record.model_high_alias);
@@ -122,6 +125,27 @@ export default function RealtimeConfig() {
                         lowValues,
                         closeValues
                     );
+
+                    const tp_xValues = take_profits.time.map((t: string) => {
+                        const dt = DateTime.fromISO(t, { zone: "America/New_York" });
+                        if (!dt.isValid) {
+                            console.error("Invalid date in take profits data:", t);
+                            return null; // or handle the error as needed
+                        }
+                        return dt.toMillis();
+                    }).filter((x: number | null) => x !== null);
+
+                    buyTakeProfitRef?.current?.clear();
+                    sellTakeProfitRef?.current?.clear();
+                    buyTakeProfitRef?.current?.appendRange(
+                        tp_xValues,
+                        take_profits.buy_take_profit
+                    );
+                    sellTakeProfitRef?.current?.appendRange(
+                        tp_xValues,
+                        take_profits.sell_take_profit
+                    );
+
 
                     //sciChartSurfaceRef.current?.zoomExtents();
                     renderTradeMarkers?.(

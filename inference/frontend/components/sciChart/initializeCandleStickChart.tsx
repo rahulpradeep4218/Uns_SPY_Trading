@@ -48,6 +48,8 @@ import {
     XyMovingAverageFilter,
     ZoomExtentsModifier,
     ZoomPanModifier,
+    PinchZoomModifier,
+    EXyDirection,
     LabelProviderBase2D,
     EAxisType,
     DateLabelProvider,
@@ -92,6 +94,8 @@ export const initializeCandleStickChart = async (
     divElementId: string | HTMLDivElement,
     candleDataSeriesRef: React.RefObject<OhlcDataSeries | null>,
     realtimeSeriesRef: React.RefObject<OhlcDataSeries | null>,
+    buyTakeProfitRef: React.RefObject<XyDataSeries | null>,
+    sellTakeProfitRef: React.RefObject<XyDataSeries | null>,
 ) => {
     SciChartSurface.configure({
         wasmUrl: "/trading/ui/scichart2d.wasm",
@@ -150,6 +154,16 @@ export const initializeCandleStickChart = async (
     });
     realtimeSeriesRef.current = realtimeDataSeries;
 
+    const buyTakeProfitDataSeries = new XyDataSeries(wasmContext, {
+        dataSeriesName: "Buy Take Profits",
+    });
+    buyTakeProfitRef.current = buyTakeProfitDataSeries;
+
+    const sellTakeProfitDataSeries = new XyDataSeries(wasmContext, {
+        dataSeriesName: "Sell Take Profits",
+    });
+    sellTakeProfitRef.current = sellTakeProfitDataSeries;
+
     const xAxis = new DateTimeNumericAxis(wasmContext, {
         // autoRange.never as we're setting visibleRange explicitly below. If you dont do this, leave this flag default
         autoRange: EAutoRange.Never,
@@ -196,8 +210,25 @@ export const initializeCandleStickChart = async (
         strokeThickness: 2,
     });
 
+    const buyTakeProfitSeries = new FastLineRenderableSeries(wasmContext, {
+        id: "Buy Take Profits",
+        dataSeries: buyTakeProfitRef.current,
+        stroke: "rgba(93, 247, 59, 0.5)", // Cyan color
+        strokeThickness: 2,
+    });
+
+    const sellTakeProfitSeries = new FastLineRenderableSeries(wasmContext, {
+        id: "Sell Take Profits",
+        dataSeries: sellTakeProfitRef.current,
+        stroke: "rgba(252, 75, 31, 0.5)", // Orange color
+        strokeThickness: 2,
+    });
+
     sciChartSurface.renderableSeries.add(candlestickSeries);
     sciChartSurface.renderableSeries.add(realtimeSeries);
+    sciChartSurface.renderableSeries.add(buyTakeProfitSeries);
+    sciChartSurface.renderableSeries.add(sellTakeProfitSeries);
+
 
 
     // Add some moving averages using SciChart's filters/transforms API
@@ -222,6 +253,7 @@ export const initializeCandleStickChart = async (
         })
     );
 
+
     const cursorModifier = new CursorModifier({
         crosshairStroke: appTheme.MutedOrange,
         axisLabelFill: appTheme.VividOrange,
@@ -234,7 +266,13 @@ export const initializeCandleStickChart = async (
     sciChartSurface.chartModifiers.add(
         new ZoomExtentsModifier(),
         new MouseWheelZoomModifier(),
-        new ZoomPanModifier({ id: "pan" }),
+        new ZoomPanModifier({ 
+            id: "pan",
+            xyDirection: EXyDirection.XyDirection,
+            enableZoom: true,
+            horizontalGrowFactor: 0.005,
+            verticalGrowFactor: 0.005,
+        }),
         new CreateTradeMarkerModifier({ id: "marker" }),
         new CreateLineAnnotationModifier({ id: "line" }),
         new CreateHorizontalLineModifier({ id: "horline" }),

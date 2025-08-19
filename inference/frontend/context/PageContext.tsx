@@ -6,7 +6,7 @@ import { initializeCandleStickChart } from '@/components/sciChart/initializeCand
 
 import { CustomAnnotation, SciChartSurface } from 'scichart';
 import { TResolvedReturnType } from 'scichart-react';
-import { OhlcDataSeries } from 'scichart';
+import { OhlcDataSeries, XyDataSeries } from 'scichart';
 
 type PageContextType = {
     sidebar_fields?: ReactNode;
@@ -54,7 +54,8 @@ type PageContextType = {
     tradeMarkerMapRef: React.RefObject<Map<number, CustomAnnotation>>;
     candleDataSeriesRef?: React.RefObject<OhlcDataSeries | null>;
     realtimeSeriesRef?: React.RefObject<OhlcDataSeries | null>;
-
+    buyTakeProfitRef?: React.RefObject<XyDataSeries | null>;
+    sellTakeProfitRef?: React.RefObject<XyDataSeries | null>;
 
     simulationRun: boolean;
     setSimulationRun: (run: boolean) => void;
@@ -106,6 +107,9 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
 
     const realtimeSeriesRef = useRef<OhlcDataSeries | null>(null);
 
+    const buyTakeProfitRef = useRef<XyDataSeries | null>(null);
+    const sellTakeProfitRef = useRef<XyDataSeries | null>(null);
+
 
     const [simulationRun, setSimulationRun] = useState<boolean>(false);
 
@@ -151,6 +155,8 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
             setSimulationRun,
             candleDataSeriesRef,
             realtimeSeriesRef,
+            buyTakeProfitRef,
+            sellTakeProfitRef,
             schwabConnStatus,
             setSchwabConnStatus,
             isRealtime,

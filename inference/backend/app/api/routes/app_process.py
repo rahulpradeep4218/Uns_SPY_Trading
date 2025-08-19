@@ -3,7 +3,9 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import asyncio
+from typing import List, Dict, Optional
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 import os
 from app.api.deps import get_db
@@ -170,11 +172,25 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
     session = db.query(TradeSession).filter(TradeSession.id == session_id).first()
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
-    
+    if session.trade_end is None or session.trade_start is None or session.trade_end == session.trade_start:
+        schwab_config = get_inf_config()['inference']['schwab']
+        trade_start, trade_end = get_first_record_time_realtime(db=db, schwab_config=schwab_config, session_record=session)
+        logger.info(f"Session trade start or end is none or equal indicating that its a realtime session , so got trade_start: {trade_start} and trade_end: {trade_end}")
+
+        trade_start_str = trade_start.strftime("%Y-%m-%d ") + "00:00:00"
+        trade_end_str = trade_end.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        trade_start = session.trade_start
+        trade_end = session.trade_end
+        trade_start_str = trade_start.strftime("%Y-%m-%d %H:%M:%S")
+        trade_end_str = trade_end.strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"Got session start and end from session record, Session trade start: {trade_start_str} and trade_end: {trade_end_str}")
+
+
     candles_query = db.query(PriceData).filter(
             PriceData.symbol == session.symbol,
-            PriceData.time <= session.trade_end,
-            PriceData.time >= session.trade_start
+            PriceData.time <= trade_end_str,
+            PriceData.time >= trade_start_str
         ).all()
     all_candles_count = len(candles_query)
 
@@ -210,11 +226,20 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
         progress
     )
 
+    take_profits = get_trade_record_values(
+        db=db,
+        session_id=session_id,
+        trade_start=trade_start,
+        trade_end=trade_end
+    )
+    
+
     response = {
         "session": jsonable_encoder(session),
         "trades": jsonable_encoder(all_trades),
         "trade_stats": trade_stats.model_dump(),
         "last_trade_signal_time": last_trade_signal_time,
+        "take_profits": take_profits,
     }
     return response
 
@@ -340,10 +365,45 @@ def get_first_record_time_realtime(db: Session, schwab_config, session_record: T
         PriceData.symbol == session_record.symbol
     ).order_by(PriceData.time.desc()).first()
     if last_candle:
-        first_record_time = last_candle.time - timedelta(days=realtime_period_days)
+        # Skip weekends when subtracting realtime_period days from trade_end
+        days_added = 0
+        trade_end = last_candle.time
+        trade_start = trade_end
+        while days_added < realtime_period_days:
+            trade_start -= timedelta(days=1)
+            if trade_start.weekday() < 5:  # Monday=0, Sunday=6
+                days_added += 1
+        return trade_start, trade_end
     else:
-        first_record_time = None
-    return first_record_time
+        return None
+
+
+def get_trade_record_values(
+        db: Session, 
+        session_id: int, 
+        trade_start: datetime, 
+        trade_end: datetime
+        ) -> Optional[Dict[str, List]]:
+    
+    trade_records = db.query(TradeRecord).filter(
+        TradeRecord.session_id == session_id,
+        TradeRecord.trade_time >= trade_start,
+        TradeRecord.trade_time <= trade_end
+    ).order_by(TradeRecord.trade_time.asc()).all()
+    if not trade_records:
+        return {
+            "time": [],
+            "sell_take_profit": [],
+            "buy_take_profit": []
+        }
+    
+    return {
+        "time": [rec.trade_time for rec in trade_records],
+        "sell_take_profit": [rec.sell_take_profit for rec in trade_records],
+        "buy_take_profit": [rec.buy_take_profit for rec in trade_records],
+    }
+
+
 
 @router.websocket("/ws/realtime")
 async def websocket_realtime(
@@ -431,7 +491,10 @@ async def websocket_realtime(
                         PriceData.time >= first_record_time,
                     ).order_by(PriceData.time.asc()).all()
                     
-                    
+                    trade_data = db.query(TradeRecord).filter(
+                        TradeRecord.session_id == session_id,
+                        TradeRecord.trade_time >= first_record_time,
+                    ).order_by(TradeRecord.trade_time.asc()).all()
                     if not initial_data_sent:
                         candles_list = [can for can in candle_data]
                         candle_table = jsonable_encoder(candles_list)
@@ -439,6 +502,18 @@ async def websocket_realtime(
                             "type": "candle_data",
                             "data": candle_table
                         })
+
+                        take_profits = get_trade_record_values(
+                            db=db,
+                            session_id=session_id,
+                            trade_start=first_record_time,
+                            trade_end=current_candle.time
+                        )
+                        await websocket.send_json({
+                            "type": "take_profits",
+                            "data": take_profits
+                        })
+
                     else:
                         last_candle = candle_data[-1] if candle_data else None
                         if last_candle:
@@ -447,6 +522,19 @@ async def websocket_realtime(
                                 "data": [serialize_candle(last_candle)]
                             })
                         
+                        last_trade = trade_data[-1] if trade_data else None
+                        if last_trade:
+                            trade_time = last_trade.trade_time
+                            trade_buy_take_profit = last_trade.buy_take_profit
+                            trade_sell_take_profit = last_trade.sell_take_profit
+                            await websocket.send_json({
+                                "type": "trade_data",
+                                "data": {
+                                    "time": [trade_time],
+                                    "buy_take_profit": [trade_buy_take_profit],
+                                    "sell_take_profit": [trade_sell_take_profit]
+                                }
+                            })
                     initial_data_sent = True
 
                 
@@ -496,8 +584,6 @@ async def websocket_realtime(
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         print(f"Client disconnected from session {session_id}")
-
-
 
 
 def get_trade_and_trade_stats(db: Session, session_id: int, progress: float):
