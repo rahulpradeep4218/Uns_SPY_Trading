@@ -435,7 +435,7 @@ async def websocket_realtime(
         logger.info("Scalers and models loaded successfully. Running sync realtime for once before entering loop")
 
         schwab_config = inf_config['inference']['schwab']
-        first_record_time = get_first_record_time_realtime(db, schwab_config, session_record)
+        first_record_time, last_record_time = get_first_record_time_realtime(db, schwab_config, session_record)
 
         #print(f"Total candles to process: {len(candles)}")
         initial_data_sent = False
@@ -473,8 +473,8 @@ async def websocket_realtime(
                     last_realtime_sync_time = time.time()
                 if now - last_history_sync_time >= history_sync_frequency:
                     logger.debug(f"Syncing history data for session {session_id} at {current_candle.time}")
-                    first_record_time = get_first_record_time_realtime(db, schwab_config, session_record)
-                    
+                    first_record_time, last_record_time = get_first_record_time_realtime(db, schwab_config, session_record)
+
                     open_trades = db.query(TradeRecord).filter(
                         TradeRecord.session_id == session_id,
                         TradeRecord.status == "OPEN"
