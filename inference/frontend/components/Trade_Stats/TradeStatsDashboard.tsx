@@ -32,6 +32,8 @@ export default function TradeStatsDashboard() {
         setSimulationRun, // for candle simulation
         candleDataSeriesRef,
         realtimeSeriesRef,
+        buyTakeProfitRef,
+        sellTakeProfitRef,
         isRealtime,
         setIsRealtime
     } = usePageContext();
@@ -110,6 +112,41 @@ export default function TradeStatsDashboard() {
                         data.data,
                         tradeMarkerMapRef
                     );
+                }
+            }
+            else if(data.type === 'take_profits'){
+                const takeProfitData = data.data;
+                if (takeProfitData.time.length > 1) {
+                    const x_TakeProfit = takeProfitData.time.map((t: string) => {
+                        const dt = DateTime.fromISO(t, { zone: "America/New_York" });
+                        if (!dt.isValid) {
+                            console.error("Invalid date in take profits data:", t);
+                            return null; // or handle the error as needed
+                        }
+                        return dt.toMillis();
+                    }).filter((x: number | null) => x !== null);
+                    buyTakeProfitRef?.current?.clear();
+                    sellTakeProfitRef?.current?.clear();
+
+                    buyTakeProfitRef?.current?.appendRange(
+                        x_TakeProfit,
+                        takeProfitData.buy_take_profit
+                    );
+                    sellTakeProfitRef?.current?.appendRange(
+                        x_TakeProfit,
+                        takeProfitData.sell_take_profit
+                    );
+                }
+                else if (takeProfitData.time.length === 1) {
+                    const t = takeProfitData.time[0];
+                    const dt = DateTime.fromISO(t, { zone: "America/New_York" });
+                    if (!dt.isValid) {
+                        console.error("Invalid date in take profits data:", t);
+                        return;
+                    }
+                    const x_TakeProfit = dt.toMillis();
+                    buyTakeProfitRef?.current?.append(x_TakeProfit, takeProfitData.buy_take_profit[0]);
+                    sellTakeProfitRef?.current?.append(x_TakeProfit, takeProfitData.sell_take_profit[0]);
                 }
             }
             else if (data.type === "candle_data"){
