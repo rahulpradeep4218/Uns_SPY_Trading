@@ -534,7 +534,7 @@ async def websocket_realtime(
                             }
                             await websocket.send_json({
                                 "type": "trade_data",
-                                "data": jsonable_trade_data
+                                "data": jsonable_encoder(jsonable_trade_data)
                             })
                     initial_data_sent = True
 
