@@ -1007,7 +1007,7 @@ async def check_schwab_orders(symbol: str):
                     if close_status == "FILLED":
                         logger.info(f"Close order {order.close_order_id} is filled. Updating the order in DB.")
                         await close_schwab_order_db(
-                            order_id=order.id, 
+                            order_id=order.open_order_id, 
                             schwab_config=schwab_config, 
                             db=db, 
                             option_price=float(order_row['options_price']) if pd.notna(order_row['options_price']) else 0, 
