@@ -1010,7 +1010,7 @@ async def check_schwab_orders(symbol: str):
                             order_id=order.open_order_id, 
                             schwab_config=schwab_config, 
                             db=db, 
-                            option_price=float(order_row['options_price']) if pd.notna(order_row['options_price']) else 0, 
+                            option_price=float(close_order_row['options_price']) if pd.notna(close_order_row['options_price']) else 0, 
                             close_order_id=order.close_order_id, 
                             reason="FILLED"
                         )

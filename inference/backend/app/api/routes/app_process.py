@@ -521,7 +521,10 @@ async def websocket_realtime(
                                 "type": "candle_data",
                                 "data": [serialize_candle(last_candle)]
                             })
-                        
+                        trade_data = db.query(TradeRecord).filter(
+                            TradeRecord.session_id == session_id,
+                            TradeRecord.trade_time >= first_record_time,
+                        ).order_by(TradeRecord.trade_time.asc()).all()
                         last_trade = trade_data[-1] if trade_data else None
                         if last_trade:
                             trade_time = last_trade.trade_time
