@@ -483,7 +483,7 @@ async def websocket_realtime(
                         if trade.trade_time < current_candle.time:
                             await check_trade_exit(trade, current_candle, sim_options)
                     db.commit()  # Commit the changes to the database
-                    last_history_sync_time = time.time()
+                    
                     logger.debug(f"Last history sync time updated to {last_history_sync_time}")
 
                     candle_data = db.query(PriceData).filter(
@@ -540,6 +540,7 @@ async def websocket_realtime(
                                 "data": jsonable_encoder(jsonable_trade_data)
                             })
                     initial_data_sent = True
+                    last_history_sync_time = time.time()
 
                 
 
@@ -566,7 +567,7 @@ async def websocket_realtime(
                         logger.error(f"Error processing candle {current_candle.time}: {str(e)}")
                         raise HTTPException(status_code=500, detail=str(e))
 
-                
+                db.expire_all()  # Clear the session to avoid stale data
                 progress = 0
                 all_trades, trade_stats = get_trade_and_trade_stats(
                     db,
