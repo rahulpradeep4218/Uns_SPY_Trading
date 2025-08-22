@@ -549,7 +549,7 @@ async def websocket_realtime(
                                 "sell_take_profit": [trade_sell_take_profit]
                             }
                             await websocket.send_json({
-                                "type": "trade_data",
+                                "type": "take_profits",
                                 "data": jsonable_encoder(jsonable_trade_data)
                             })
                     initial_data_sent = True
