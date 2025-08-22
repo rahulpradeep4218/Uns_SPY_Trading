@@ -145,8 +145,8 @@ export default function TradeStatsDashboard() {
                         return;
                     }
                     const x_TakeProfit = dt.toMillis();
-                    buyTakeProfitRef?.current?.append(x_TakeProfit, takeProfitData.buy_take_profit[0]);
-                    sellTakeProfitRef?.current?.append(x_TakeProfit, takeProfitData.sell_take_profit[0]);
+                    buyTakeProfitRef?.current?.appendRange([x_TakeProfit], takeProfitData.buy_take_profit);
+                    sellTakeProfitRef?.current?.appendRange([x_TakeProfit], takeProfitData.sell_take_profit);
                 }
             }
             else if (data.type === "candle_data"){
