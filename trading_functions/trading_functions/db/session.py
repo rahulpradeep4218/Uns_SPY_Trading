@@ -16,7 +16,14 @@ INF_POSTGRES_DB = get_env("INF_POSTGRES_DB", "DAGSTER_INF_POSTGRES_DB", "dbname"
 
 INF_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{INF_POSTGRES_DB}"
 
-engine = create_engine(INF_DATABASE_URL, echo=False)
+engine = create_engine(
+    INF_DATABASE_URL, 
+    echo=False,
+    pool_size=20,
+    max_overflow=40,
+    pool_timeout=60,
+    pool_recycle=21600
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
