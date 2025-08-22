@@ -140,13 +140,31 @@ export default function TradeStatsDashboard() {
                 else if (takeProfitData.time.length === 1) {
                     const t = takeProfitData.time[0];
                     const dt = DateTime.fromISO(t, { zone: "America/New_York" });
-                    if (!dt.isValid) {
-                        console.error("Invalid date in take profits data:", t);
-                        return;
+                    const buy_dataseries = buyTakeProfitRef?.current;
+                    const sell_dataseries = sellTakeProfitRef?.current;
+                    if (!buy_dataseries || !sell_dataseries) return;
+                    const xValues = buy_dataseries.getNativeXValues();
+                    let foundIndex = -1;
+                    for (let i = buy_dataseries.count() - 1; i >= 0; i--) {
+                        if (xValues.get(i) === dt.toMillis()) {
+                            foundIndex = i;
+                            break;
+                        }
                     }
-                    const x_TakeProfit = dt.toMillis();
-                    buyTakeProfitRef?.current?.appendRange([x_TakeProfit], takeProfitData.buy_take_profit);
-                    sellTakeProfitRef?.current?.appendRange([x_TakeProfit], takeProfitData.sell_take_profit);
+                    //
+                    if (foundIndex >= 0) {
+                        console.log("Updating existing take profit at index:", foundIndex, "with time:", t);
+                        buy_dataseries.removeAt(foundIndex);
+                        sell_dataseries.removeAt(foundIndex);
+                    }
+                    buyTakeProfitRef?.current?.append(
+                        dt.toMillis(),
+                        takeProfitData.buy_take_profit[0]
+                    );
+                    sellTakeProfitRef?.current?.append(
+                        dt.toMillis(),
+                        takeProfitData.sell_take_profit[0]
+                    );
                 }
             }
             else if (data.type === "candle_data"){

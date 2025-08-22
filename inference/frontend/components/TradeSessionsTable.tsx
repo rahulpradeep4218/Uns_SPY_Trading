@@ -161,7 +161,8 @@ export default function TradeSessionsTable() {
                         sciChartSurfaceRef?.current!,
                         trade_records,
                         tradeMarkerMapRef
-                    );
+                );
+                
 
 
             } catch (error) {

@@ -526,6 +526,7 @@ async def websocket_realtime(
                             "type": "take_profits",
                             "data": jsonable_encoder(take_profits)
                         })
+                        #
 
                     else:
                         last_candle = candle_data[-1] if candle_data else None
