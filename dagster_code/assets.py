@@ -6,6 +6,7 @@ import pandas as pd
 from trading_functions.common.transform import normalize_timegaps, close_diff_transform
 from trading_functions.common.indicators import add_all_indicators
 from resources import TrainingConfig, MLFlowResource
+from trading_functions.trading_functions import db
 from trading_functions.training.utility import (
     save_df_parquet_link, 
     generate_model_id, 
@@ -107,19 +108,28 @@ def training_data(context, raw_data, training_config: TrainingConfig, model_meta
     train_start_date_str = str(cfg["train_start_date"])
     train_end_date_str = str(cfg["train_end_date"])
     # Filter data based on the provided date range
-    train_data = get_filtered_data(raw_data, train_start_date_str, train_end_date_str)
-    row_count = train_data.shape[0]
-    if row_count == 0:
-        context.log.info("No data found in the excel data for the specified date range, so going to search in db")
-        train_data = get_data_from_db(start_date=train_start_date_str, end_date=train_end_date_str, context=context)
-        source = "Database"
-        row_count = train_data.shape[0]
-        if row_count == 0:
-            context.log.error("No data found in the database for the specified date range.") 
-            raise ValueError("No data found in the excel or database for the specified date range.")
-        train_data['Date'] = pd.to_datetime(train_data['Date'])
-    else:
+    train_data_excel = get_filtered_data(raw_data, train_start_date_str, train_end_date_str)
+    excel_row_count = train_data_excel.shape[0]
+
+    train_data_db = get_data_from_db(start_date=train_start_date_str, end_date=train_end_date_str, context=context)
+    db_row_count = train_data_db.shape[0]
+
+    if excel_row_count > db_row_count:
+        train_data = train_data_excel
+        row_count = excel_row_count
         source = "Excel"
+    else:
+        train_data = train_data_db
+        row_count = db_row_count
+        source = "Database"
+    context.log.info(f"Using {source} data with {row_count} rows for the training data.")
+
+    if row_count == 0:
+        context.log.error("No data found in the database or excel for the specified date range.") 
+        raise ValueError("No data found in the excel or database for the specified date range.")
+        
+    train_data['Date'] = pd.to_datetime(train_data['Date'])
+
     parq_link = quick_save_parquet_link(
         df=train_data,
         config=conf,
@@ -148,20 +158,29 @@ def test_data(context, raw_data, training_config: TrainingConfig, model_metadata
     test_start_date_str = str(cfg["test_start_date"])
     test_end_date_str = str(cfg["test_end_date"])
     # Filter data based on the provided date range
-    test_data = get_filtered_data(raw_data, test_start_date_str, test_end_date_str)
-    row_count = test_data.shape[0]
+    test_data_excel = get_filtered_data(raw_data, test_start_date_str, test_end_date_str)
+    excel_row_count = test_data_excel.shape[0]
+
+    test_data_db = get_data_from_db(start_date=test_start_date_str, end_date=test_end_date_str, context=context)
+    db_row_count = test_data_db.shape[0]
+    context.log.info(f"Excel row count: {excel_row_count}, DB row count: {db_row_count}")
+    if excel_row_count > db_row_count:
+        test_data = test_data_excel
+        row_count = excel_row_count
+        source = "Excel"
+    else:
+        test_data = test_data_db
+        row_count = db_row_count
+        source = "Database"
+        
+    context.log.info(f"Using {source} data with {row_count} rows for the test data.")
 
     if row_count == 0:
-        context.log.info("No data found in the excel data for the specified date range, so going to search in db")
-        test_data = get_data_from_db(start_date=test_start_date_str, end_date=test_end_date_str, context=context)
-        source = "Database"
-        row_count = test_data.shape[0]
-        if row_count == 0:
-            context.log.error("No data found in the database for the specified date range.") 
-            raise ValueError("No data found in the excel or database for the specified date range.")
-        test_data['Date'] = pd.to_datetime(test_data['Date'])
-    else:
-        source = "Excel"
+        context.log.info("No data found in the excel or db for the specified date range")
+        raise ValueError("No data found in the excel or database for the specified date range.")
+    
+    test_data['Date'] = pd.to_datetime(test_data['Date'])
+
     parq_link = quick_save_parquet_link(
         df=test_data,
         config=conf,
