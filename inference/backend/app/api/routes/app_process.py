@@ -348,6 +348,19 @@ async def websocket_simulation(
                 "data": trade_stats.model_dump()
             })
 
+            take_profits = get_trade_record_values(
+                db=db,
+                session_id=session_id,
+                trade_start=session_record.trade_start,
+                trade_end=current_candle.time
+            )
+
+            await websocket.send_json({
+                "type": "take_profits",
+                "data": jsonable_encoder(take_profits)
+            })
+
+            
             trade_table = [trade for trade in all_trades]
             trade_table = jsonable_encoder(trade_table)
             await websocket.send_json({
