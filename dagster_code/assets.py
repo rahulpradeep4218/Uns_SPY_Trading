@@ -1,12 +1,9 @@
-from numpy import test
-from xgboost import train
 from dagster import asset, MetadataValue, MaterializeResult
 import pandas as pd
 
 from trading_functions.common.transform import normalize_timegaps, close_diff_transform
 from trading_functions.common.indicators import add_all_indicators
 from resources import TrainingConfig, MLFlowResource
-from trading_functions.trading_functions import db
 from trading_functions.training.utility import (
     save_df_parquet_link, 
     generate_model_id, 
