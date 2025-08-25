@@ -452,7 +452,8 @@ async def websocket_realtime(
 
         #print(f"Total candles to process: {len(candles)}")
         initial_data_sent = False
-        realtime_sync_frequency = history_sync_frequency = 1
+        realtime_sync_frequency = schwab_config['realtime_schwab_sync_frequency']
+        history_sync_frequency = schwab_config['history_schwab_sync_frequency']
         while True:
             
             candles_query = db.query(PriceData).filter(
