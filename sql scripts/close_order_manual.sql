@@ -1,0 +1,1 @@
+update schwab_orders set closed = true, close_time = now(), close_status = 'MANUAL_CLOSE' where open_order_id = '1004024354200';
