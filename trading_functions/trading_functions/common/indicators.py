@@ -69,6 +69,7 @@ def compute_fourier_df(data, config, column='Close'):
         if i >= period - 1:
             #print("entered point 1")
             close_window = data['Close'].iloc[i - period + 1: i + 1].values
+            close_window = close_window - close_window[0]
             fft_result = np.fft.fft(close_window)
             real = fft_result.real
             imag = fft_result.imag
