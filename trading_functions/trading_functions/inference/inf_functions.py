@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import yaml
 from datetime import datetime, timezone
+import talib
 
 
 def scale_for_inference(data, config, scalers):
@@ -193,7 +194,11 @@ def get_prediction(data, model_high, model_low, training_config, scalers):
         "current_close": current_close
     }
 
+def calculate_ATR_Standalone(data, atr_period, atr_ma):
 
+    data['ATR'] = talib.ATR(data['High'], data['Low'], data['Close'], timeperiod=atr_period)
+    data['ADJATR'] = talib.SMA(data['ATR'], timeperiod=atr_ma)
+    return data
 
 
 def make_random_candles(n, freq_minutes):
