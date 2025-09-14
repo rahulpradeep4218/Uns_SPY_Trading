@@ -1,7 +1,7 @@
 
 from trading_functions.training.utility import get_columns_mapping, get_all_training_features
 from trading_functions.common.logging_config import logger
-from trading_functions.common.transform import normalize_timegaps, close_diff_transform
+from trading_functions.common.transform import normalize_timegaps_inference, close_diff_transform
 from trading_functions.common.indicators import add_all_indicators
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -135,7 +135,7 @@ def transform_for_inference(data, config, scalers):
     logger.debug("Converted 'Date' column to datetime.")
 
     # Normalize time gaps
-    data = normalize_timegaps(data, config)
+    data = normalize_timegaps_inference(data, config)
     logger.debug("Normalized time gaps in the data.")
 
     # Add indicators if needed

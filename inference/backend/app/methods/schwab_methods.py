@@ -598,12 +598,18 @@ async def sync_realtime_price_history(
         .dt.tz_convert("America/New_York")
         .dt.strftime("%Y-%m-%d %H:%M:%S")
     )
+
     df['time'] = pd.to_datetime(df['time'], format="%Y-%m-%d %H:%M:%S")
     first_record_time = df['time'].iloc[0]
+
     logger.info(f"First record time for {symbol} is {first_record_time}")
     logger.info(f"Last record time for {symbol} is {df['time'].iloc[-1]}")
     #print("Number of rows fetched:", len(df))
     #print(df.tail())
+    last_open = df['open'].iloc[-1]
+    if last_open == 0:
+        logger.warning("Last open price is 0, so not valid data. exiting")
+        return pd.DataFrame()
 
     latest_db_time = db.query(func.max(PriceData.time)).filter(
         PriceData.symbol == symbol

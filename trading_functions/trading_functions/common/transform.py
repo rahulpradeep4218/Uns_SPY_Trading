@@ -32,6 +32,35 @@ def normalize_timegaps(df, config):
     df.drop(columns=['time_delta', 'time_gap_flag'], inplace=True)
     return df
 
+def normalize_timegaps_inference(df, config):
+    cfg = config['common_config']
+    time_gap_threshold = cfg['normalize_timegap_threshold']
+    df = df.copy()
+    features = ['Open', 'High', 'Low', 'Close']
+
+    df['time_delta'] = df['Date'].diff().dt.total_seconds()
+    df['time_delta'] = df['time_delta'].fillna(df['time_delta'].median())
+
+    df['time_gap_flag'] = df['time_delta'] > time_gap_threshold
+    gap_indices = df.index[df['time_gap_flag']].tolist()
+
+    adjustment_factor = 1.0
+
+    # Process forward: from oldest to newest
+    for p in gap_indices:
+        if p > 0:  # ensure p-1 exists
+            prev_close = df.loc[p - 1, 'Close']
+            this_open = df.loc[p, 'Open']
+            gap_percentage = this_open / prev_close
+
+            adjustment_factor *= gap_percentage
+
+            # Apply scaling to rows before p (older data)
+            df.loc[:p - 1, features] /= gap_percentage
+
+    df.drop(columns=['time_delta', 'time_gap_flag'], inplace=True)
+    return df
+
 
 def close_diff_transform(df, config):
     cfg = config['common_config']
