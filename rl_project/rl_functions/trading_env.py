@@ -1,7 +1,8 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from rl_functions.utils import get_slope, get_data
+from datetime import datetime
+from rl_functions.utils import get_data
 
 class TradingEnv(gym.Env):
 
@@ -17,42 +18,72 @@ class TradingEnv(gym.Env):
 
     """
 
-    def __init__(self, data, initial_balance=10000, daily_trades_limit=20):
+    def __init__(self, db, symbol, start_date, end_date, initial_balance=10000, trade_fee=0.5, max_trade_loss_percent=2.0, obs_features=None, price_multiplier=10):
         super().__init__()
         # Storing the data
-        self.initial_balance = initial_balance
-        self.total_balance = initial_balance
-        self.daily_trades_limit = daily_trades_limit
+        self.obs_features = obs_features
+        self.initial_balance = initial_balance    # Balance
+        self.max_trade_loss_percent = max_trade_loss_percent
+        self.max_episode_loss = self.initial_balance * self.max_trade_loss_percent / 100
+        self.trade_fee = trade_fee
+        self.symbol = symbol
+        self.start_date = start_date
+        self.end_date = end_date
+        self.db = db 
+        self.episode_id = 0
+        self.price_multiplier = price_multiplier    
 
+        # Actions
+        self.action_space = spaces.Discrete(4)  # Buy Call, Buy Put, Hold, Sell
+
+        # Placeholder for observation space, will be defined in reset
+        self.observation_space = None
+        
         self.reset()
 
 
-    def reset(self):
-        self.current_balance = self.initial_balance
+    def reset(self, *, seed=None, options=None):
 
+        super().reset(seed=seed)
+        # Load data for a random trading day
+        self.data = get_data(self.symbol, self.start_date, self.end_date, self.db)
+        self.data.reset_index(drop=True, inplace=True)
+        self.pnl = 0.0
+        self.active_pnl = 0.0
+        self.prev_total_pnl = 0.0
+        self.balance = self.initial_balance
+        self.max_episode_loss = self.balance * self.max_trade_loss_percent / 100
         # Initializing the current step to 0
         self.current_step = 0
         self.max_steps = len(self.data)
 
-        # Action and observation space
-        self.action_space = spaces.Discrete(4)  # Buy Call, Buy Put, Hold, Sell
-        self.observation_space = spaces.Box(low=0, high=np.inf, shape=(len(self.data.columns),), dtype=np.float32)
-
+        # Observation space ( Market data + agent state)
+        ### Agent state components:
+        # 1 active_trade (0/1),
+        # 2 trade_direction (−1, 0, +1),
+        # 3 time_in_trade_norm,
+        # 4 distance_to_stop_norm,
+        # 5 current_step
+        agent_state_dim = 4
+        obs_dim = len(self.obs_features) + agent_state_dim
+        self.observation_space = spaces.Box(
+            low=-10.0, 
+            high=10.0, 
+            shape=(obs_dim,), 
+            dtype=np.float32
+        )
         
-        # Day parameters
-        self.minute_of_day = 9*60 + 30  # 9:30 AM
-        self.minutes_remaining = 16 * 60 - self.minute_of_day
 
         # Trading state
         self.no_trades_completed = 0
         self.active_trade = False
         self.active_trade_direction = 0
-        self.active_trade_entry_price = 0
-        #self.active_trade_profit = 0
-        #self.active_trade_take_profit_distance = 0
-        self.active_trade_stop_loss= 0
-        self.active_trade_stop_loss_distance = 0
+        self.active_trade_entry_price = 0.0
         self.active_trade_duration = 0
+
+        # Episode related
+        self.episode_length = 0
+
 
         """
         These attributes will be obtained from data
@@ -81,17 +112,109 @@ class TradingEnv(gym.Env):
         self.pred_low_slope_20 = 0
         """
 
-        return self.data.iloc[self.current_step].values
-    
+        info = {}
 
-    def get_observation(self):
-        data_row = self.data.iloc[self.current_step]
-        obs = np.array(data_row, dtype=np.float32)
+        return self._get_observation(), info
+    
+    def build_observation_row(self, row):
+        return np.array(
+            [row[f] for f in self.obs_features],
+            dtype=np.float32
+        )
+
+
+    def _get_observation(self):
+        market_obs = self.build_observation_row(self.data.iloc[self.current_step])
+
+        total_pnl = self.pnl + self.active_pnl
+
+        loss_ratio = total_pnl / self.max_episode_loss if self.max_episode_loss != 0 else 0.0
+        loss_ratio = np.clip(loss_ratio, -1.0, 1.0)
+
+        agent_obs = [
+            self.active_trade,
+            self.active_trade_direction,
+            self.current_step / self.max_steps,
+            loss_ratio
+        ]
+
+        return np.concatenate(
+            [market_obs, np.array(agent_obs, dtype=np.float32)]
+        )
+                              
 
     def step(self, action):
         # Implement the logic for taking a step in the environment
-        done = False
+        terminated = False
+        truncated = False
         reward = 0.0
+        self.episode_length += 1
         obs = self.data.iloc[self.current_step]
+        price = obs['Close']
 
-        pass
+        if action == 1 and not self.active_trade:  # Buy Call
+            self.active_trade = True
+            self.active_trade_direction = 1
+            self.active_trade_entry_price = price
+            self.active_trade_duration = 0
+            self.pnl -= self.trade_fee
+        
+        elif action == 2 and not self.active_trade:  # Buy Put
+            self.active_trade = True
+            self.active_trade_direction = -1
+            self.active_trade_entry_price = price
+            self.active_trade_duration = 0
+            self.pnl -= self.trade_fee
+
+        elif action == 3 and self.active_trade:  # Sell (Close position)
+            trade_profit = (price - self.active_trade_entry_price) * self.active_trade_direction * self.price_multiplier
+            self.pnl += trade_profit - self.trade_fee
+            self.active_pnl = 0.0
+            self.active_trade = False
+            self.active_trade_direction = 0
+            self.active_trade_entry_price = 0.0
+            self.active_trade_duration = 0
+            self.no_trades_completed += 1
+
+        ### Unrealized PnL calculation
+        if self.active_trade:
+            self.active_pnl = (price - self.active_trade_entry_price) * self.active_trade_direction * self.price_multiplier
+            self.active_trade_duration += 1
+        else:
+            self.active_pnl = 0.0
+
+        # ---- Reward Calculation ----
+        total_pnl = self.pnl + self.active_pnl
+        reward = total_pnl - self.prev_total_pnl
+        self.prev_total_pnl = total_pnl
+
+        # --- Advance time
+        self.current_step += 1
+
+        # -- Episode Termination Conditions
+
+        if self.current_step >= self.max_steps - 1:
+            truncated = True
+
+        if total_pnl <= -self.max_episode_loss:
+            terminated = True
+
+        obs = self._get_observation()
+
+        info = {
+            "total_pnl": total_pnl,
+            "realized_pnl": self.pnl,
+            "unrealized_pnl": self.active_pnl,
+            "active_trade": self.active_trade,
+            "no_trades_completed": self.no_trades_completed,
+            "Balance": self.balance + total_pnl,
+            "episode_length": self.episode_length,
+        }
+
+        if terminated or truncated:
+            print("Episode details for episode id : ", self.episode_id)
+            print(info)
+            self.episode_id += 1
+
+
+        return obs, reward, terminated, truncated, info

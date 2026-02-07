@@ -19,6 +19,7 @@ from trading_functions.training.utility import (
     get_file_viewer_link,
     get_dagster_run_id_path
 )
+from trading_functions.common.indicators import get_fourier_columns
 import xgboost as xgb
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
 from trading_functions.db.session import SessionLocal, INF_DATABASE_URL
@@ -109,16 +110,28 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
     scaled_data = df.copy()
 
     minmax_features = get_columns_mapping(scale_cfg['minmax']['columns'], config)
-    standard_features = get_columns_mapping(scale_cfg['standard']['columns'], config)
+    standard_features = get_columns_mapping(scale_cfg['standard']['columns'], config) + ['']
     robust_features = get_columns_mapping(scale_cfg['robust']['columns'], config)
+    fourier_columns = get_fourier_columns(config)
     minmax_scaler = MinMaxScaler()
     standard_scaler = StandardScaler()
     robust_scaler = RobustScaler()
+
+    label_features = ['High_Label', 'Low_Label']
+    label_scaling = config['common_config']['label_scale']
+    if label_scaling == 'standard':
+        standard_features = standard_features + label_features
+    elif label_scaling == 'minmax':
+        minmax_features = minmax_features + label_features
+    elif label_scaling == 'robust':
+        robust_features = robust_features + label_features
 
     if train_or_test == 'train':
         #minmax scaling
         context.log.info(f"Applying Fit Transform Min-Max scaling to features: {minmax_features}")
         if len(minmax_features) > 0:
+            if 'fourier' in minmax_features:
+                minmax_features = [f for f in minmax_features if f != 'fourier'] + fourier_columns
             scaled_data[minmax_features] = minmax_scaler.fit_transform(scaled_data[minmax_features])
         else:
             minmax_scaler = None
@@ -126,6 +139,8 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
         #Standard scaling
         context.log.info(f"Applying Fit Transform Standard scaling to features: {standard_features}")
         if len(standard_features) > 0:
+            if 'fourier' in standard_features:
+                standard_features = [f for f in standard_features if f != 'fourier'] + fourier_columns
             scaled_data[standard_features] = standard_scaler.fit_transform(scaled_data[standard_features])
         else:
             standard_scaler = None
@@ -133,6 +148,8 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
         #Robust Scaling
         context.log.info(f"Applying Fit Transform Robust scaling to features: {robust_features}")
         if len(robust_features) > 0:
+            if 'fourier' in robust_features:
+                robust_features = [f for f in robust_features if f != 'fourier'] + fourier_columns
             scaled_data[robust_features] = robust_scaler.fit_transform(scaled_data[robust_features])
         else:
             robust_scaler = None
@@ -155,18 +172,24 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
         scalers = joblib.load(scaler_path)
         #minmax scaling
         if scalers['minmax'] is not None and len(minmax_features) > 0:
+            if 'fourier' in minmax_features:
+                minmax_features = [f for f in minmax_features if f != 'fourier'] + fourier_columns
             context.log.info(f"Applying Transform Min-Max scaling to features: {minmax_features}")
             scaled_data[minmax_features] = scalers['minmax'].transform(scaled_data[minmax_features])
         else:
             context.log.info("No Min-Max scaler found or no features to scale.")
         #Standard scaling
         if scalers['standard'] is not None and len(standard_features) > 0:
+            if 'fourier' in standard_features:
+                standard_features = [f for f in standard_features if f != 'fourier'] + fourier_columns
             context.log.info(f"Applying Transform Standard scaling to features: {standard_features}")
             scaled_data[standard_features] = scalers['standard'].transform(scaled_data[standard_features])
         else:
             context.log.info("No Standard scaler found or no features to scale.")
         #Robust Scaling
         if scalers['robust'] is not None and len(robust_features) > 0:
+            if 'fourier' in robust_features:
+                robust_features = [f for f in robust_features if f != 'fourier'] + fourier_columns
             context.log.info(f"Applying Transform Robust scaling to features: {robust_features}")
             scaled_data[robust_features] = scalers['robust'].transform(scaled_data[robust_features])
         else:
@@ -203,13 +226,15 @@ def quantile_loss(ytrue, y_pred, quantile):
 
 def add_labels_high_low(df, config):
     num_bars = config['num_bars_to_look_labels']
-    label_scaling_multiplier = config['label_scaling_multiplier']
+    # label_scaling_multiplier = config['label_scaling_multiplier']
     df['High_Label'] = df['High'].rolling(window=num_bars).max().shift(-num_bars+1)
     df['Low_Label'] = df['Low'].rolling(window=num_bars).min().shift(-num_bars+1)
     df['High_Label'] = df['High_Label'] - df['Close']
     df['Low_Label'] = df['Close'] - df['Low_Label']
-    df['High_Label'] = df['High_Label'] / df['Close'] * label_scaling_multiplier
-    df['Low_Label'] = df['Low_Label'] / df['Close'] * label_scaling_multiplier
+    df['High_Label'] = df['High_Label'] / df['Close']
+    df['Low_Label'] = df['Low_Label'] / df['Close']
+    # df['High_Label'] = df['High_Label'] / df['Close'] * label_scaling_multiplier
+    # df['Low_Label'] = df['Low_Label'] / df['Close'] * label_scaling_multiplier
     df.dropna(inplace=True)
     return df
 
@@ -470,8 +495,8 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
     best_params = params['best_params']
     non_hp_params = get_other_non_hp_params(config)
     best_params.update(non_hp_params)
-    quantile_alpha = config['training_details'][f'qalpha_{high_low}'].split(',')
-    quantile_alpha = [float(alpha) for alpha in quantile_alpha]
+    quantile_alpha = config['training_details'][f'qalpha_{high_low}']
+    quantile_alpha = float(quantile_alpha)
     best_params['quantile_alpha'] = quantile_alpha
     context.log.info(f"Training model {high_low} with parameters: {best_params}")
     best_iteration = params['best_iteration']
@@ -496,9 +521,14 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
         preds_example = preds[:5]
         signature = infer_signature(input_example, preds_example)
         y_test_values = ytest.values.ravel()  # Flatten the y_test array
-        loss1 = quantile_loss(y_test_values, preds[:, 0], quantile_alpha[0])
-        loss2 = quantile_loss(y_test_values, preds[:, 1], quantile_alpha[1])
-        q_loss = np.mean([loss1, loss2])
+
+        # Changed this to use just 1 quantile alpha for each model high and low
+        # loss1 = quantile_loss(y_test_values, preds[:, 0], quantile_alpha[0])
+        # loss2 = quantile_loss(y_test_values, preds[:, 1], quantile_alpha[1])
+        # q_loss = np.mean([loss1, loss2])
+        q_loss = quantile_loss(y_test_values, preds, quantile_alpha)
+
+        
         context.log.info(f"Quantile loss for {high_low} labels: {q_loss}")
         mlflow.log_metric(f'quantile_loss_{high_low}', q_loss)
         mlflow.log_metric('best_iteration', best_iteration)
@@ -564,7 +594,7 @@ def train_model(df_dict, params, config, context, model_metadata, high_low='', m
     return model_info
 
 
-def get_model_evaluation(context, config, input_output_df_test:dict, models:dict, model_metadata, mlflow_resource, parent_run_id, original_data):
+def get_model_evaluation(context, config, input_output_df_test:dict, models:dict, model_metadata, mlflow_resource, parent_run_id, original_data, scaler_path = ''):
     """
     Evaluate the trained model using the test dataset.
     
@@ -583,7 +613,14 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     train_model_high = high_model_info['model']
     train_model_low = low_model_info['model']
 
-    label_scaling_multiplier = config['common_config']['label_scaling_multiplier']
+    if scaler_path == '':
+        scaler_path = get_scaler_path(config, model_metadata)
+
+
+    scalers = joblib.load(scaler_path)
+
+    # label_scaling_multiplier = config['common_config']['label_scaling_multiplier']
+    label_scale_type = config['common_config']['label_scale']
     high_label = config['training_details']['high_label_column']
     low_label = config['training_details']['low_label_column']
     trade_init_ratio_threshold = config['trade_parameters']['trade_init_ratio_threshold']
@@ -601,16 +638,19 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     low_preds = train_model_low.predict(quantile_dmatrix)
     output_df = test_df.copy()
     output_df = pd.concat([init_columns_df, output_df, output_high_df, output_low_df], axis=1)
-    output_df[high_label] = output_df[high_label] * output_df['Close'].values / label_scaling_multiplier
-    output_df[high_label] = output_df[high_label] + output_df['Close']
-    output_df[low_label] = output_df[low_label] * output_df['Close'].values / label_scaling_multiplier
-    output_df[low_label] = output_df['Close'] - output_df[low_label]
-    output_df['pred_sell_stop'] = high_preds[:, 1]
-    output_df['pred_buy_take'] = high_preds[:, 0]
-    output_df['pred_sell_take'] = low_preds[:, 1]
-    output_df['pred_buy_stop'] = low_preds[:, 0]
+    
+    output_df[low_label] = scalers[label_scale_type].inverse_transform(output_df[[low_label]])
+    output_df[low_label] = output_df['Close'] - (output_df[low_label] * output_df['Close'].values)
+
+    output_df[high_label] = scalers[label_scale_type].inverse_transform(output_df[[high_label]])
+    output_df[high_label] = output_df['Close'] + (output_df[high_label] * output_df['Close'].values)
+
+    output_df['pred_sell_stop'] = high_preds
+    output_df['pred_buy_take'] = high_preds
+    output_df['pred_sell_take'] = low_preds
+    output_df['pred_buy_stop'] = low_preds
     columns_to_update = ['pred_buy_stop', 'pred_buy_take', 'pred_sell_stop', 'pred_sell_take']
-    output_df[columns_to_update] = output_df[columns_to_update] * output_df['Close'].values[:, None] / label_scaling_multiplier
+    output_df[columns_to_update] = scalers[label_scale_type].inverse_transform(output_df[columns_to_update]) * output_df['Close'].values.reshape(-1, 1)
     output_df['pred_sell_stop'] = output_df['pred_sell_stop'] + output_df['Close']
     output_df['pred_buy_take'] = output_df['pred_buy_take'] + output_df['Close']
     output_df['pred_sell_take'] = output_df['Close'] - output_df['pred_sell_take']
