@@ -51,6 +51,7 @@ def normalize_timegaps_inference(df, config):
         if p > 0:  # ensure p-1 exists
             prev_close = df.loc[p - 1, 'Close']
             this_open = df.loc[p, 'Open']
+            # print(f"Normalizing gap at index {p}: prev_close={prev_close}, this_open={this_open}")
             gap_percentage = this_open / prev_close
 
             adjustment_factor *= gap_percentage

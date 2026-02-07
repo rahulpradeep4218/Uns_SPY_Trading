@@ -2,7 +2,7 @@
 from trading_functions.training.utility import get_columns_mapping, get_all_training_features
 from trading_functions.common.logging_config import logger
 from trading_functions.common.transform import normalize_timegaps_inference, close_diff_transform
-from trading_functions.common.indicators import add_all_indicators
+from trading_functions.common.indicators import add_all_indicators, get_fourier_columns
 import mlflow
 from mlflow.tracking import MlflowClient
 import os
@@ -13,7 +13,9 @@ import numpy as np
 import yaml
 from datetime import datetime, timezone
 import talib
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def scale_for_inference(data, config, scalers):
     scale_cfg = config['scaling']
@@ -22,19 +24,27 @@ def scale_for_inference(data, config, scalers):
     standard_features = get_columns_mapping(scale_cfg['standard']['columns'], config)
     robust_features = get_columns_mapping(scale_cfg['robust']['columns'], config)
 
+    fourier_columns = get_fourier_columns(config)
+
     if scalers['minmax'] is not None and len(minmax_features) > 0:
+        if 'fourier' in minmax_features:
+            minmax_features = [f for f in minmax_features if f != 'fourier'] + fourier_columns
         logger.debug(f"Applying Transform Min-Max scaling to features: {minmax_features}")
         data[minmax_features] = scalers['minmax'].transform(data[minmax_features])
     else:
         logger.debug("No Min-Max scaler found or no features to scale.")
     #Standard scaling
     if scalers['standard'] is not None and len(standard_features) > 0:
+        if 'fourier' in standard_features:
+            standard_features = [f for f in standard_features if f != 'fourier'] + fourier_columns
         logger.debug(f"Applying Transform Standard scaling to features: {standard_features}")
         data[standard_features] = scalers['standard'].transform(data[standard_features])
     else:
         logger.debug("No Standard scaler found or no features to scale.")
     #Robust Scaling
     if scalers['robust'] is not None and len(robust_features) > 0:
+        if 'fourier' in robust_features:
+            robust_features = [f for f in robust_features if f != 'fourier'] + fourier_columns
         logger.debug(f"Applying Transform Robust scaling to features: {robust_features}")
         data[robust_features] = scalers['robust'].transform(data[robust_features])
     else:
@@ -50,7 +60,6 @@ def get_model_from_mlflow(config, model_name="", model_version=None):
 
 
 def download_artifacts(config, alias="dev", mlflow_uri=None):
-    ml_client = MlflowClient()
 
     if mlflow_uri:
         logger.info(f"Setting MLflow tracking URI to {mlflow_uri}")
@@ -58,6 +67,8 @@ def download_artifacts(config, alias="dev", mlflow_uri=None):
     else:
         logger.info(f"Using default MLflow tracking URI from config : {config['mlflow']['tracking_uri']}")
         mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
+
+    ml_client = MlflowClient()
     high_model_name = config['mlflow']['high_model_name']
  
     logger.info(f"Using model alias: {alias} for model: {high_model_name}")
@@ -129,7 +140,7 @@ def transform_for_inference(data, config, scalers):
     5. Scale features using Min-Max, Standard, and Robust scalers
     """
     logger.debug("Starting data transformation for inference.")
-
+    logger.info(f"Initial data shape: {data.shape}")
     # Make datetime column a pd.datetime object
     data['Date'] = pd.to_datetime(data['Date'])
     logger.debug("Converted 'Date' column to datetime.")
@@ -137,15 +148,18 @@ def transform_for_inference(data, config, scalers):
     # Normalize time gaps
     data = normalize_timegaps_inference(data, config)
     logger.debug("Normalized time gaps in the data.")
-
+    logger.info(f"Data shape after time gap normalization: {data.shape}")
     # Add indicators if needed
     data, selected_indicators = add_all_indicators(data, config)
     logger.debug(f"Added indicators to the data : {selected_indicators}")
+    logger.info(f"Data shape after adding indicators: {data.shape}")
     #print(f"Shape after adding indicators: {data.shape}")
     #print("Columns after adding indicators:", data.columns.tolist())
     # Close difference transformation
     data, close_diff_features = close_diff_transform(data, config)
     logger.debug(f"Applied close difference transformation on features: {close_diff_features}")
+
+    logger.info(f"Data shape before scaling: {data.shape}")
 
     # Scale features
     scale_for_inference(data, config, scalers)
@@ -193,6 +207,37 @@ def get_prediction(data, model_high, model_low, training_config, scalers):
         "sell_stop": sell_stop,
         "current_close": current_close
     }
+
+
+def get_bulk_prediction(data, model_high, model_low, training_config, scalers):
+    """
+    Get predictions from the high and low models for all rows in the data.
+    """
+    data = transform_for_inference(data=data.copy(), config=training_config, scalers=scalers)
+    all_features = get_all_training_features(training_config)
+    
+    current_closes = data['Close'].values
+    features = data[all_features]
+    
+    buy_vals = model_high.predict(features)
+    sell_vals = model_low.predict(features)
+    
+    buy_takes = buy_vals[:, 0]
+    sell_takes = sell_vals[:, 0]
+    buy_stops = sell_vals[:, 1]
+    sell_stops = buy_vals[:, 1]
+    
+    label_scaling_multiplier = training_config['common_config']['label_scaling_multiplier']
+    
+    buy_takes = (buy_takes * current_closes / label_scaling_multiplier) + current_closes
+    sell_takes = current_closes - (sell_takes * current_closes / label_scaling_multiplier)
+    buy_stops = current_closes - (buy_stops * current_closes / label_scaling_multiplier)
+    sell_stops = (sell_stops * current_closes / label_scaling_multiplier) + current_closes
+
+    data['pred_high'] = buy_takes
+    data['pred_low'] = sell_takes
+    
+    return data
 
 def calculate_ATR_Standalone(data, atr_period, atr_ma):
 

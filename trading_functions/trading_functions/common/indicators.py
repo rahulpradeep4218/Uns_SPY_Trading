@@ -35,6 +35,7 @@ def add_all_indicators(data, config):
                 print(f"Function {func_name} is not found or not callable")
     else:
         print("No function list provided, adding all indicators.")
+    #print("Data tail after adding indicators:\n", data.tail())
     data.dropna(inplace=True)  # Drop rows with NaN values after adding indicators
     return data, selected_indicators
 
@@ -78,6 +79,12 @@ def compute_fourier_df(data, config, column='Close'):
                 data.iloc[i, data.columns.get_loc(f'fourier_real_{j}')] = real[j]
                 data.iloc[i, data.columns.get_loc(f'fourier_imag_{j}')] = imag[j]
     return data
+
+
+def get_fourier_columns(config):
+    period = config['fourier']['period']
+    fourier_n_components = (period - 2) // 2 
+    return [f'fourier_real_{j}' for j in range(1, fourier_n_components+1)] + [f'fourier_imag_{j}' for j in range(1, fourier_n_components+1)]  
 
 
 def calculate_tchr(data, config, column='Close'):
