@@ -666,8 +666,17 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     output_df['buy_sell_ratio'] = (output_df['pred_buy_take'] - output_df['Close']) / (output_df['Close'] - output_df['pred_sell_take'])
     output_df['sell_buy_ratio'] = (output_df['Close'] - output_df['pred_sell_take']) / (output_df['pred_buy_take'] - output_df['Close'])
 
-    output_df['buy_signal'] = (output_df['buy_sell_ratio'] > trade_init_ratio_threshold) & (output_df['buy_risk_reward'] > trade_risk_ratio_threshold)
-    output_df['sell_signal'] = (output_df['sell_buy_ratio'] > trade_init_ratio_threshold) & (output_df['sell_risk_reward'] > trade_risk_ratio_threshold)
+    # Prevent low values from turning to winning signals
+    min_move_pct = config['training_details']['eval_min_move_percentage']   
+    min_move_pct = float(min_move_pct)
+    output_df['buy_move_pct'] = (output_df['pred_buy_take'] - output_df['Close']) / output_df['Close']
+    output_df['sell_move_pct'] = (output_df['Close'] - output_df['pred_sell_take']) / output_df['Close']
+
+
+
+    output_df['buy_signal'] = (output_df['buy_sell_ratio'] > trade_init_ratio_threshold) & (output_df['buy_risk_reward'] > trade_risk_ratio_threshold) & (output_df['buy_move_pct'] > min_move_pct)
+    output_df['sell_signal'] = (output_df['sell_buy_ratio'] > trade_init_ratio_threshold) & (output_df['sell_risk_reward'] > trade_risk_ratio_threshold) & (output_df['sell_move_pct'] > min_move_pct)
+    
     output_df['risk_reward'] = np.where(
         output_df['buy_signal'], 
         output_df['buy_risk_reward'], 
