@@ -1,5 +1,5 @@
 # Dockerfile.backend
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Install system packages required to build TA-Lib and Python packages
 RUN apt-get update && apt-get install -y \
@@ -37,8 +37,10 @@ RUN pip install /opt/trading_functions && pip show trading_functions
 
 WORKDIR /
 
-COPY ./inference/backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the requirements file into the image
+COPY requirements.backend.txt .
+# Install all packages from requirements.txt
+RUN pip install --no-cache-dir -r requirements.backend.txt
 
 COPY ./inference/backend/ .
 

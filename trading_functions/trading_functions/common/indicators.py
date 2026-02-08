@@ -82,7 +82,7 @@ def compute_fourier_df(data, config, column='Close'):
 
 
 def get_fourier_columns(config):
-    period = config['fourier']['period']
+    period = config['indicators']['parameters']['fourier']['period']
     fourier_n_components = (period - 2) // 2 
     return [f'fourier_real_{j}' for j in range(1, fourier_n_components+1)] + [f'fourier_imag_{j}' for j in range(1, fourier_n_components+1)]  
 

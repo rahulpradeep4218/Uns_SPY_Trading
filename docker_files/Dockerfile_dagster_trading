@@ -1,13 +1,12 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 #Define Environment Variable
 ENV CODE_LOC=/opt/code
 
-RUN pip install \
-    dagster \
-    dagster-postgres \
-    dagster-docker \
-    numpy
+# Copy the requirements file into the image
+COPY requirements.dagster_code.txt .
+# Install all packages from requirements.txt
+RUN pip install --no-cache-dir -r requirements.dagster_code.txt
 
 RUN pip install --upgrade pip
 

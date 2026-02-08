@@ -110,7 +110,7 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
     scaled_data = df.copy()
 
     minmax_features = get_columns_mapping(scale_cfg['minmax']['columns'], config)
-    standard_features = get_columns_mapping(scale_cfg['standard']['columns'], config) + ['']
+    standard_features = get_columns_mapping(scale_cfg['standard']['columns'], config)
     robust_features = get_columns_mapping(scale_cfg['robust']['columns'], config)
     fourier_columns = get_fourier_columns(config)
     minmax_scaler = MinMaxScaler()
@@ -378,13 +378,11 @@ def get_objective(dtrain, dtest, y_test, q_alpha, config, eval_metric, num_boost
         trial.set_user_attr("best_iteration", xgb_model.best_iteration)
         preds = xgb_model.predict(dtest)
         y_test_values = y_test.values.ravel()  # Flatten the y_test array
-        loss1 = quantile_loss(y_test_values, preds[:, 0], q_alpha[0])
-        loss2 = quantile_loss(y_test_values, preds[:, 1], q_alpha[1])
-        combined_score = np.mean([loss1, loss2])
+        score = quantile_loss(y_test_values, preds, q_alpha)
         
-        context.log.info(f"Trial {trial.number}: Best iteration = {xgb_model.best_iteration}, test rmse = {combined_score}")
+        context.log.info(f"Trial {trial.number}: Best iteration = {xgb_model.best_iteration}, test rmse = {score}")
 
-        return combined_score
+        return score
     
     return objective
 
@@ -403,8 +401,8 @@ def optimize_parameters(df_dict, config, context, model_metadata, high_low=''):
     """
     num_boosting_rounds = config['training_details']['num_boost_rounds']
     eval_metric = config['training_details']['eval_metric']
-    q_alpha = config['training_details'][f'qalpha_{high_low}'].split(',')
-    q_alpha = [float(alpha) for alpha in q_alpha]
+    q_alpha = config['training_details'][f'qalpha_{high_low}']
+    q_alpha = float(q_alpha)
     dtrain = xgb.QuantileDMatrix(df_dict[f'X_train_{high_low}'], df_dict[f'y_train_{high_low}'])
     dtest = xgb.QuantileDMatrix(df_dict[f'X_test_{high_low}'], df_dict[f'y_test_{high_low}'], ref=dtrain)
     

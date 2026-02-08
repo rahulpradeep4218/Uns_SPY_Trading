@@ -1,5 +1,5 @@
 #Base image
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 
 # Install system packages required to build TA-Lib and Python packages
@@ -43,8 +43,10 @@ WORKDIR /app
 # Copy streamlit code and requirements
 COPY ./ui .
 
-# Install requirements
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the requirements file into the image
+COPY requirements.streamlit.txt .
+# Install all packages from requirements.txt
+RUN pip install --no-cache-dir -r requirements.streamlit.txt
 
 # Run streamlit app with base URL setting
 CMD ["streamlit", "run", "Home.py", "--server.address=0.0.0.0"]

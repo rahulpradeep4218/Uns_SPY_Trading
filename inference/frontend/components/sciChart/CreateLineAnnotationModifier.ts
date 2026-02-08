@@ -83,7 +83,9 @@ export class CreateLineAnnotationModifier extends ChartModifierBase2D {
         if (!this.editingAnnotation) return;
         const xAxis = this.parentSurface.getXAxisById(this?.editingAnnotation?.xAxisId!);
         const yAxis = this.parentSurface.getYAxisById(this?.editingAnnotation?.yAxisId!);
-
+        
+        if (!xAxis || !yAxis) return;
+        
         this.editingAnnotation.x2 = xAxis.getCurrentCoordinateCalculator().getDataValue(mousePoint.x);
         this.editingAnnotation.y2 = yAxis.getCurrentCoordinateCalculator().getDataValue(mousePoint.y);
     }

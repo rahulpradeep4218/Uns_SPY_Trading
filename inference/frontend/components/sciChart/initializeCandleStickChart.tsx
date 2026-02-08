@@ -99,7 +99,6 @@ export const initializeCandleStickChart = async (
 ) => {
     SciChartSurface.configure({
         wasmUrl: "/trading/ui/scichart2d.wasm",
-        dataUrl: "/trading/ui/scichart2d.data",
     });
     const { sciChartSurface, wasmContext } = await SciChartSurface.create(divElementId, {
         theme: appTheme.SciChartJsTheme,

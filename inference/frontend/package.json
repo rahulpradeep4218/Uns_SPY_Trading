@@ -34,7 +34,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.58.1",
     "sass": "^1.89.2",
-    "scichart": "^3.5.762",
+    "scichart": "^5.0.178",
     "scichart-react": "^0.1.13",
     "tss-react": "^4.9.18"
   },

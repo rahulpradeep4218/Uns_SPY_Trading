@@ -1,7 +1,6 @@
 import { ChartModifierBase2D } from "scichart/Charting/ChartModifiers/ChartModifierBase2D";
 import { ModifierMouseArgs } from "scichart/Charting/ChartModifiers/ModifierMouseArgs";
 import { HorizontalLineAnnotation } from "scichart/Charting/Visuals/Annotations/HorizontalLineAnnotation";
-import { EExecuteOn } from "scichart/types/ExecuteOn";
 import { translateFromCanvasToSeriesViewRect } from "scichart";
 
 export class CreateHorizontalLineModifier extends ChartModifierBase2D {

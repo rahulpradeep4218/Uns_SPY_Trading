@@ -1,9 +1,11 @@
 # Dockerfile.mlflow
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 
-# Install MLflow and Postgres driver
-RUN pip install --no-cache-dir mlflow psycopg2-binary
+# Copy the requirements file into the image
+COPY requirements.mlflow.txt .
+# Install all packages from requirements.txt
+RUN pip install --no-cache-dir -r requirements.mlflow.txt
 
 RUN apt-get update && apt-get install -y postgresql-client
 
