@@ -637,18 +637,24 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     output_df = test_df.copy()
     output_df = pd.concat([init_columns_df, output_df, output_high_df, output_low_df], axis=1)
     
-    output_df[low_label] = scalers[label_scale_type].inverse_transform(output_df[[low_label]])
-    output_df[low_label] = output_df['Close'] - (output_df[low_label] * output_df['Close'].values)
-
-    output_df[high_label] = scalers[label_scale_type].inverse_transform(output_df[[high_label]])
-    output_df[high_label] = output_df['Close'] + (output_df[high_label] * output_df['Close'].values)
-
+    low_label_index = -2
+    high_label_index = -1
     output_df['pred_sell_stop'] = high_preds
     output_df['pred_buy_take'] = high_preds
     output_df['pred_sell_take'] = low_preds
     output_df['pred_buy_stop'] = low_preds
-    columns_to_update = ['pred_buy_stop', 'pred_buy_take', 'pred_sell_stop', 'pred_sell_take']
-    output_df[columns_to_update] = scalers[label_scale_type].inverse_transform(output_df[columns_to_update]) * output_df['Close'].values.reshape(-1, 1)
+    # output_df[low_label] = scalers[label_scale_type].inverse_transform(output_df[[low_label]])
+    if label_scale_type == 'standard':
+
+        output_df[low_label] = output_df[low_label] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].mean_[low_label_index]
+        output_df[high_label] = output_df[high_label] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].mean_[high_label_index]
+        output_df['pred_sell_stop'] = output_df['pred_sell_stop'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].mean_[high_label_index]
+        output_df['pred_buy_take'] = output_df['pred_buy_take'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].mean_[high_label_index]
+        output_df['pred_sell_take'] = output_df['pred_sell_take'] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].mean_[low_label_index]
+        output_df['pred_buy_stop'] = output_df['pred_buy_stop'] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].mean_[low_label_index]
+
+    output_df[low_label] = output_df['Close'] - (output_df[low_label] * output_df['Close'].values)
+    output_df[high_label] = output_df['Close'] + (output_df[high_label] * output_df['Close'].values)
     output_df['pred_sell_stop'] = output_df['pred_sell_stop'] + output_df['Close']
     output_df['pred_buy_take'] = output_df['pred_buy_take'] + output_df['Close']
     output_df['pred_sell_take'] = output_df['Close'] - output_df['pred_sell_take']
@@ -727,6 +733,7 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
             "total_profit": MetadataValue.float(float(total_profit)),
             "sample_output_df": MetadataValue.md(output_df.head().to_markdown()),
             "parquet_link": MetadataValue.url(parq_link),
+            "label_scale_type": MetadataValue.md(label_scale_type),
         }
     )
     return output_df
