@@ -119,37 +119,37 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
 
     label_features = ['High_Label', 'Low_Label']
     label_scaling = config['common_config']['label_scale']
-    if label_scaling == 'standard':
-        standard_features = standard_features + label_features
-    elif label_scaling == 'minmax':
-        minmax_features = minmax_features + label_features
-    elif label_scaling == 'robust':
-        robust_features = robust_features + label_features
 
     if train_or_test == 'train':
         #minmax scaling
         context.log.info(f"Applying Fit Transform Min-Max scaling to features: {minmax_features}")
-        if len(minmax_features) > 0:
+        if len(minmax_features) > 0 or label_scaling == 'minmax':
             if 'fourier' in minmax_features:
                 minmax_features = [f for f in minmax_features if f != 'fourier'] + fourier_columns
+            if label_scaling == 'minmax':
+                minmax_features = minmax_features + label_features
             scaled_data[minmax_features] = minmax_scaler.fit_transform(scaled_data[minmax_features])
         else:
             minmax_scaler = None
 
         #Standard scaling
         context.log.info(f"Applying Fit Transform Standard scaling to features: {standard_features}")
-        if len(standard_features) > 0:
+        if len(standard_features) > 0 or label_scaling == 'standard':
             if 'fourier' in standard_features:
                 standard_features = [f for f in standard_features if f != 'fourier'] + fourier_columns
+            if label_scaling == 'standard':
+                standard_features = standard_features + label_features
             scaled_data[standard_features] = standard_scaler.fit_transform(scaled_data[standard_features])
         else:
             standard_scaler = None
         
         #Robust Scaling
         context.log.info(f"Applying Fit Transform Robust scaling to features: {robust_features}")
-        if len(robust_features) > 0:
+        if len(robust_features) > 0 or label_scaling == 'robust':
             if 'fourier' in robust_features:
                 robust_features = [f for f in robust_features if f != 'fourier'] + fourier_columns
+            if label_scaling == 'robust':
+                robust_features = robust_features + label_features
             scaled_data[robust_features] = robust_scaler.fit_transform(scaled_data[robust_features])
         else:
             robust_scaler = None
@@ -171,25 +171,32 @@ def scale_features(df, config, context, model_metadata, train_or_test='train', s
 
         scalers = joblib.load(scaler_path)
         #minmax scaling
-        if scalers['minmax'] is not None and len(minmax_features) > 0:
+        if (scalers['minmax'] is not None and len(minmax_features) > 0) or label_scaling == 'minmax':
             if 'fourier' in minmax_features:
                 minmax_features = [f for f in minmax_features if f != 'fourier'] + fourier_columns
+            if label_scaling == 'minmax':
+                minmax_features = minmax_features + label_features
             context.log.info(f"Applying Transform Min-Max scaling to features: {minmax_features}")
             scaled_data[minmax_features] = scalers['minmax'].transform(scaled_data[minmax_features])
         else:
             context.log.info("No Min-Max scaler found or no features to scale.")
         #Standard scaling
-        if scalers['standard'] is not None and len(standard_features) > 0:
+        
+        if (scalers['standard'] is not None and len(standard_features) > 0) or label_scaling == 'standard':
             if 'fourier' in standard_features:
                 standard_features = [f for f in standard_features if f != 'fourier'] + fourier_columns
+            if label_scaling == 'standard':
+                standard_features = standard_features + label_features
             context.log.info(f"Applying Transform Standard scaling to features: {standard_features}")
             scaled_data[standard_features] = scalers['standard'].transform(scaled_data[standard_features])
         else:
             context.log.info("No Standard scaler found or no features to scale.")
         #Robust Scaling
-        if scalers['robust'] is not None and len(robust_features) > 0:
+        if (scalers['robust'] is not None and len(robust_features) > 0) or label_scaling == 'robust':
             if 'fourier' in robust_features:
                 robust_features = [f for f in robust_features if f != 'fourier'] + fourier_columns
+            if label_scaling == 'robust':
+                robust_features = robust_features + label_features
             context.log.info(f"Applying Transform Robust scaling to features: {robust_features}")
             scaled_data[robust_features] = scalers['robust'].transform(scaled_data[robust_features])
         else:
@@ -637,8 +644,8 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     output_df = test_df.copy()
     output_df = pd.concat([init_columns_df, output_df, output_high_df, output_low_df], axis=1)
     
-    low_label_index = -2
-    high_label_index = -1
+    low_label_index = -1
+    high_label_index = -2
     output_df['pred_sell_stop'] = high_preds
     output_df['pred_buy_take'] = high_preds
     output_df['pred_sell_take'] = low_preds
