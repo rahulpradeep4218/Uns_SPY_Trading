@@ -662,10 +662,10 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
 
     output_df[low_label] = output_df['Close'] - (output_df[low_label] * output_df['Close'].values)
     output_df[high_label] = output_df['Close'] + (output_df[high_label] * output_df['Close'].values)
-    output_df['pred_sell_stop'] = output_df['pred_sell_stop'] + output_df['Close']
-    output_df['pred_buy_take'] = output_df['pred_buy_take'] + output_df['Close']
-    output_df['pred_sell_take'] = output_df['Close'] - output_df['pred_sell_take']
-    output_df['pred_buy_stop'] = output_df['Close'] - output_df['pred_buy_stop']
+    output_df['pred_sell_stop'] = (output_df['pred_sell_stop'] * output_df['Close'].values) + output_df['Close']
+    output_df['pred_buy_take'] = (output_df['pred_buy_take'] * output_df['Close'].values) + output_df['Close']
+    output_df['pred_sell_take'] = output_df['Close'] - (output_df['pred_sell_take'] * output_df['Close'].values)
+    output_df['pred_buy_stop'] = output_df['Close'] - (output_df['pred_buy_stop'] * output_df['Close'].values)
 
     output_df['buy_risk_reward'] = (output_df['pred_buy_take'] - output_df['Close']) / (output_df['Close'] - output_df['pred_buy_stop'])
     output_df['sell_risk_reward'] = (output_df['Close'] - output_df['pred_sell_take']) / (output_df['pred_sell_stop'] - output_df['Close'])
