@@ -690,14 +690,24 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
         np.where(output_df['sell_signal'], output_df['sell_risk_reward'], 0)
     )
 
-    cond1 = (output_df['buy_signal']) & (output_df[low_label] < output_df['pred_buy_stop'])
-    cond2 = (output_df['sell_signal']) & (output_df[high_label] > output_df['pred_sell_stop'])
-    cond3 = (output_df['buy_signal']) & (output_df[high_label] > output_df['pred_buy_take'])
-    cond4 = (output_df['sell_signal']) & (output_df[low_label] < output_df['pred_sell_take'])
+    # cond1 = (output_df['buy_signal']) & (output_df[low_label] < output_df['pred_buy_stop'])
+    # cond2 = (output_df['sell_signal']) & (output_df[high_label] > output_df['pred_sell_stop'])
+    # cond3 = (output_df['buy_signal']) & (output_df[high_label] > output_df['pred_buy_take'])
+    # cond4 = (output_df['sell_signal']) & (output_df[low_label] < output_df['pred_sell_take'])
+
+    cond_loss = (
+        (output_df['buy_signal'] & (output_df[low_label] < output_df['pred_buy_stop'])) | 
+        (output_df['sell_signal'] & (output_df[high_label] > output_df['pred_sell_stop']))
+    )
+
+    cond_win = (
+        (output_df['buy_signal'] & (output_df[high_label] > output_df['pred_buy_take'])) |
+        (output_df['sell_signal'] & (output_df[low_label] < output_df['pred_sell_take']))
+    )
 
     output_df['win'] = np.select(
-        condlist=[cond1 | cond2, cond3 | cond4],
-        choicelist=[1, -1],  # 1 for win, -1 for loss
+        condlist=[cond_loss, cond_win],
+        choicelist=[-1, 1],  # 1 for win, -1 for loss
         default=0  # 0 for no trade
     )
     output_df['win'] = output_df['win'].astype(int)
@@ -708,6 +718,8 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     )
 
     total_trades = output_df['win'].value_counts().get(1, 0) + output_df['win'].value_counts().get(-1, 0)
+    total_buys = output_df['buy_signal'].sum()
+    total_sells = output_df['sell_signal'].sum()
     total_wins = output_df['win'].value_counts().get(1, 0)
     total_losses = output_df['win'].value_counts().get(-1, 0)
     win_percentage = (total_wins / total_trades * 100) if total_trades > 0 else 0
@@ -743,6 +755,8 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     context.add_output_metadata(
         {
             "total_trades": MetadataValue.int(int(total_trades)),
+            "total_buys": MetadataValue.int(int(total_buys)),
+            "total_sells": MetadataValue.int(int(total_sells)),
             "total_wins": MetadataValue.int(int(total_wins)),
             "total_losses": MetadataValue.int(int(total_losses)),
             "win_percentage": MetadataValue.float(float(win_percentage)),
