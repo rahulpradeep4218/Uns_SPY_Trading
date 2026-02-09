@@ -628,6 +628,7 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     label_scale_type = config['common_config']['label_scale']
     high_label = config['training_details']['high_label_column']
     low_label = config['training_details']['low_label_column']
+    risk_reward = config['training_details']['risk_reward']
     trade_init_ratio_threshold = config['trade_parameters']['trade_init_ratio_threshold']
     trade_risk_ratio_threshold = config['trade_parameters']['trade_risk_ratio_threshold']
 
@@ -646,26 +647,36 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
     
     low_label_index = -1
     high_label_index = -2
-    output_df['pred_sell_stop'] = high_preds
+    # output_df['pred_sell_stop'] = high_preds
     output_df['pred_buy_take'] = high_preds
     output_df['pred_sell_take'] = low_preds
-    output_df['pred_buy_stop'] = low_preds
+    # output_df['pred_buy_stop'] = low_preds
     # output_df[low_label] = scalers[label_scale_type].inverse_transform(output_df[[low_label]])
     if label_scale_type == 'standard':
 
         output_df[low_label] = output_df[low_label] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].mean_[low_label_index]
         output_df[high_label] = output_df[high_label] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].mean_[high_label_index]
-        output_df['pred_sell_stop'] = output_df['pred_sell_stop'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].mean_[high_label_index]
+        # output_df['pred_sell_stop'] = output_df['pred_sell_stop'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].mean_[high_label_index]
         output_df['pred_buy_take'] = output_df['pred_buy_take'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].mean_[high_label_index]
         output_df['pred_sell_take'] = output_df['pred_sell_take'] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].mean_[low_label_index]
-        output_df['pred_buy_stop'] = output_df['pred_buy_stop'] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].mean_[low_label_index]
+        # output_df['pred_buy_stop'] = output_df['pred_buy_stop'] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].mean_[low_label_index]
 
+    elif label_scale_type == 'robust':
+        output_df[low_label] = output_df[low_label] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].center_[low_label_index]
+        output_df[high_label] = output_df[high_label] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].center_[high_label_index]
+
+        outout_df['pred_buy_take'] = output_df['pred_buy_take'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].center_[high_label_index]
+        output_df['pred_sell_take'] = output_df['pred_sell_take'] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].center_[low_label_index]
+        
     output_df[low_label] = output_df['Close'] - (output_df[low_label] * output_df['Close'].values)
     output_df[high_label] = output_df['Close'] + (output_df[high_label] * output_df['Close'].values)
-    output_df['pred_sell_stop'] = (output_df['pred_sell_stop'] * output_df['Close'].values) + output_df['Close']
+    # output_df['pred_sell_stop'] = (output_df['pred_sell_stop'] * output_df['Close'].values) + output_df['Close']
     output_df['pred_buy_take'] = (output_df['pred_buy_take'] * output_df['Close'].values) + output_df['Close']
     output_df['pred_sell_take'] = output_df['Close'] - (output_df['pred_sell_take'] * output_df['Close'].values)
-    output_df['pred_buy_stop'] = output_df['Close'] - (output_df['pred_buy_stop'] * output_df['Close'].values)
+    # output_df['pred_buy_stop'] = output_df['Close'] - (output_df['pred_buy_stop'] * output_df['Close'].values)
+
+    output_df['pred_buy_stop'] = output_df['Close'] - (output_df['pred_buy_take'] - output_df['Close']) * risk_reward
+    output_df['pred_sell_stop'] = output_df['Close'] + (output_df['Close'] - output_df['pred_sell_take']) * risk_reward
 
     output_df['buy_risk_reward'] = (output_df['pred_buy_take'] - output_df['Close']) / (output_df['Close'] - output_df['pred_buy_stop'])
     output_df['sell_risk_reward'] = (output_df['Close'] - output_df['pred_sell_take']) / (output_df['pred_sell_stop'] - output_df['Close'])
