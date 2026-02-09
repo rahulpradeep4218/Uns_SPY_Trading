@@ -665,7 +665,7 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
         output_df[low_label] = output_df[low_label] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].center_[low_label_index]
         output_df[high_label] = output_df[high_label] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].center_[high_label_index]
 
-        outout_df['pred_buy_take'] = output_df['pred_buy_take'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].center_[high_label_index]
+        output_df['pred_buy_take'] = output_df['pred_buy_take'] * scalers[label_scale_type].scale_[high_label_index] + scalers[label_scale_type].center_[high_label_index]
         output_df['pred_sell_take'] = output_df['pred_sell_take'] * scalers[label_scale_type].scale_[low_label_index] + scalers[label_scale_type].center_[low_label_index]
         
     output_df[low_label] = output_df['Close'] - (output_df[low_label] * output_df['Close'].values)
