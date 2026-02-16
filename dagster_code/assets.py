@@ -1,4 +1,4 @@
-from dagster import asset, MetadataValue, MaterializeResult
+from dagster import asset, MetadataValue
 import pandas as pd
 
 from trading_functions.common.transform import normalize_timegaps, close_diff_transform
@@ -7,7 +7,6 @@ from resources import TrainingConfig, MLFlowResource
 from trading_functions.training.utility import (
     save_df_parquet_link, 
     generate_model_id, 
-    get_first_directory,
     get_all_training_features
 )
 
@@ -16,7 +15,6 @@ from trading_functions.training.ml_pipeline import (
     quick_save_parquet_link,
     add_labels_high_low,
     get_train_test_split,
-    get_quantile_dmatrix,
     optimize_parameters,
     train_model,
     scale_features,
@@ -24,13 +22,11 @@ from trading_functions.training.ml_pipeline import (
     get_data_from_db,
 )
 
-from datetime import datetime
-import os
 import mlflow
 
 
 
-@asset
+@asset(group_name="model_training")
 def model_metadata(context, training_config: TrainingConfig) -> dict:
     """
     Create metadata for the model run.
@@ -49,7 +45,7 @@ def model_metadata(context, training_config: TrainingConfig) -> dict:
     return model_metadata_dict
 
 
-@asset
+@asset(group_name="model_training")
 def raw_data(context, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Load the complete data from an Excel file
@@ -97,7 +93,7 @@ def raw_data(context, training_config: TrainingConfig, model_metadata) -> pd.Dat
     return data
 
 
-@asset
+@asset(group_name="model_training")
 def training_data(context, raw_data, training_config: TrainingConfig, model_metadata):
     conf = training_config.load()
     cfg = conf['training_details']
@@ -147,7 +143,7 @@ def training_data(context, raw_data, training_config: TrainingConfig, model_meta
     return train_data
 
 
-@asset
+@asset(group_name="model_training")
 def test_data(context, raw_data, training_config: TrainingConfig, model_metadata):
     conf = training_config.load()
     cfg = conf['training_details']
@@ -198,7 +194,7 @@ def test_data(context, raw_data, training_config: TrainingConfig, model_metadata
     return test_data
 
 
-@asset
+@asset(group_name="model_training")
 def normalize_timegaps_training(context, training_data: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Normalize time gaps in the loaded data.
@@ -235,7 +231,7 @@ def normalize_timegaps_training(context, training_data: pd.DataFrame, training_c
     return normalized_data
 
 
-@asset
+@asset(group_name="model_training")
 def add_indicators_training(context, normalize_timegaps_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add technical indicators to the loaded data.
@@ -274,7 +270,7 @@ def add_indicators_training(context, normalize_timegaps_training: pd.DataFrame, 
     
     return data_with_indicators
 
-@asset
+@asset(group_name="model_training")
 def close_diff_transform_training(context, add_indicators_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Transform some columns by calculating the difference with Close column.
@@ -312,7 +308,7 @@ def close_diff_transform_training(context, add_indicators_training: pd.DataFrame
     )
     return transformed_data
 
-@asset
+@asset(group_name="model_training")
 def add_labels_training(context, close_diff_transform_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add labels for high and low prices based on the configuration.
@@ -343,7 +339,7 @@ def add_labels_training(context, close_diff_transform_training: pd.DataFrame, tr
     )
     return labeled_data
 
-@asset
+@asset(group_name="model_training")
 def scale_data_training(context, add_labels_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Scale the data using Min-Max scaling.
@@ -368,7 +364,7 @@ def scale_data_training(context, add_labels_training: pd.DataFrame, training_con
 
 
 
-@asset
+@asset(group_name="model_training")
 def input_output_df_training(context, scale_data_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> dict:
 
     conf = training_config.load()
@@ -407,7 +403,7 @@ def input_output_df_training(context, scale_data_training: pd.DataFrame, trainin
     return output_dict
 
 
-@asset
+@asset(group_name="model_training")
 def train_test_split_high_model(context, input_output_df_training: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Split the data into training and testing sets for the buy model.
@@ -429,7 +425,7 @@ def train_test_split_high_model(context, input_output_df_training: dict, trainin
     
     return output_dict
 
-@asset
+@asset(group_name="model_training")
 def train_test_split_low_model(context, input_output_df_training: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Split the data into training and testing sets for the sell model.
@@ -452,7 +448,7 @@ def train_test_split_low_model(context, input_output_df_training: dict, training
     return output_dict
 
 
-@asset
+@asset(group_name="model_training")
 def hyperparameter_tuning_high(context, train_test_split_high_model: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Perform hyperparameter tuning for the buy model.
@@ -476,7 +472,7 @@ def hyperparameter_tuning_high(context, train_test_split_high_model: dict, train
     return best_params
 
 
-@asset
+@asset(group_name="model_training")
 def hyperparameter_tuning_low(context, train_test_split_low_model: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Perform hyperparameter tuning for the sell model.
@@ -499,7 +495,7 @@ def hyperparameter_tuning_low(context, train_test_split_low_model: dict, trainin
     
     return best_params
 
-@asset
+@asset(group_name="model_training")
 def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_resource: MLFlowResource, hyperparameter_tuning_high: dict, hyperparameter_tuning_low: dict) -> dict:
     """
     Start a parent run for the training pipeline.
@@ -540,7 +536,7 @@ def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_res
     return output_dict
 
 
-@asset
+@asset(group_name="model_training")
 def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_high_model: dict, hyperparameter_tuning_high: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource, model_metadata) -> dict:
     """
     Train the buy model using the best hyperparameters.
@@ -572,7 +568,7 @@ def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_hi
     return xgb_model_high_info  
 
 
-@asset
+@asset(group_name="model_training")
 def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low_model: dict, hyperparameter_tuning_low: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource, model_metadata) -> dict:
     """
     Train the sell model using the best hyperparameters.
@@ -604,7 +600,7 @@ def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low
     
     return xgb_model_low_info
 
-@asset
+@asset(group_name="model_training")
 def normalize_timegaps_test(context, test_data: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Normalize time gaps in the test data.
@@ -641,7 +637,7 @@ def normalize_timegaps_test(context, test_data: pd.DataFrame, training_config: T
     
     return normalized_data
 
-@asset
+@asset(group_name="model_training")
 def add_indicators_test(context, normalize_timegaps_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add technical indicators to the test data.
@@ -678,7 +674,7 @@ def add_indicators_test(context, normalize_timegaps_test: pd.DataFrame, training
     
     return data_with_indicators
 
-@asset
+@asset(group_name="model_training")
 def close_diff_transform_test(context, add_indicators_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Transform some columns by calculating the difference with Close column in the test data.
@@ -715,7 +711,7 @@ def close_diff_transform_test(context, add_indicators_test: pd.DataFrame, traini
     )   
     return transformed_data
 
-@asset
+@asset(group_name="model_training")
 def add_labels_test(context, close_diff_transform_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add labels for high and low prices based on the configuration in the test data.
@@ -749,7 +745,7 @@ def add_labels_test(context, close_diff_transform_test: pd.DataFrame, training_c
     return labeled_data
 
 
-@asset
+@asset(group_name="model_training")
 def scale_data_test(context, add_labels_test: pd.DataFrame, scale_data_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Scale the test data using Min-Max scaling.
@@ -772,7 +768,7 @@ def scale_data_test(context, add_labels_test: pd.DataFrame, scale_data_training:
 
     return scaled_data
 
-@asset
+@asset(group_name="model_training")
 def input_output_df_test(context, scale_data_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Prepare input and output DataFrames for the test data.
@@ -818,7 +814,7 @@ def input_output_df_test(context, scale_data_test: pd.DataFrame, training_config
 
     return output_dict
 
-@asset
+@asset(group_name="model_training")
 def evaluate_model(context, input_output_df_test: dict, scale_data_test:pd.DataFrame, train_model_high, train_model_low, mlflow_resource:MLFlowResource, training_config: TrainingConfig, model_metadata, start_mlflow_parent_run) -> pd.DataFrame:
     models_dict = {
         'train_model_high': train_model_high,
@@ -837,4 +833,170 @@ def evaluate_model(context, input_output_df_test: dict, scale_data_test:pd.DataF
         original_data=scale_data_test
     )
     return evaluation_results
+
+
+
+################################# Assets for reinforcement Learning Pipeline ############################
+
+
+@asset(group_name="rl_training")
+def rl_model_metadata(context, training_config: TrainingConfig) -> dict:
+    """
+    Create metadata for the model run.
+    
+    Args:
+        training_config (TrainingConfig): Configuration for the training run.
+
+    Returns:
+        MaterializeResult: Metadata for the model run.
+    """
+    conf = training_config.load()
+    cfg = conf['training_details']
+    model_id = generate_model_id(model_name=cfg['model_name'])
+    context.log.info(f"RL Model id: {model_id}")
+    rl_model_metadata_dict = {'model_id': model_id,}
+    return rl_model_metadata_dict
+
+
+@asset(group_name="rl_training")
+def rl_raw_data(context, training_config: TrainingConfig, rl_model_metadata) -> pd.DataFrame:
+    """
+    Load the complete data from an Excel file
+    
+    Args:
+        sheet_names (str): Comma-separated string of sheet names to load.
+        all_data_path (str): Path to the Excel file.
+
+    Returns:
+        pd.DataFrame:  DataFrame containing the loaded data.
+    """
+    conf = training_config.load()
+    cfg = conf['training_details']
+    # Split the sheet names into a list
+    sheet_names = cfg["sheet_names"]
+    all_data_path = cfg["all_data_path"]
+
+    sheet_names = [sheet.strip() for sheet in sheet_names.split(",")]
+    context.log.info(f"Config training details: {cfg}")
+    # Load data from the specified sheets
+    data = pd.concat(pd.read_excel(all_data_path, sheet_name=sheet_names), ignore_index=True)
+
+    # Convert 'Date' column to datetime format
+    data['Date'] = pd.to_datetime(data['Date'])
+
+    #Remove symbol column
+    data.drop(columns=['Symbol'], inplace=True)
+    
+    row_count = data.shape[0]
+    context.log.info(f"Number of rows in the filtered data: {row_count}")
+
+    context.add_output_metadata(
+        {
+            "row_count": MetadataValue.int(row_count),
+            "sample_head": MetadataValue.md(data.head().to_markdown()),
+        }
+    )
+    return data
+
+
+@asset(group_name="rl_training")
+def rl_training_data(context, rl_raw_data, training_config: TrainingConfig, rl_model_metadata):
+    conf = training_config.load()
+    cfg = conf['rl']
+
+    train_start_date_str = str(cfg["train_start_date"])
+    train_end_date_str = str(cfg["train_end_date"])
+    # Filter data based on the provided date range
+    train_data_excel = get_filtered_data(rl_raw_data, train_start_date_str, train_end_date_str)
+    excel_row_count = train_data_excel.shape[0]
+
+    train_data_db = get_data_from_db(start_date=train_start_date_str, end_date=train_end_date_str, context=context)
+    db_row_count = train_data_db.shape[0]
+
+    if excel_row_count > db_row_count:
+        train_data = train_data_excel
+        row_count = excel_row_count
+        source = "Excel"
+    else:
+        train_data = train_data_db
+        row_count = db_row_count
+        source = "Database"
+    context.log.info(f"Using {source} data with {row_count} rows for the training data.")
+
+    if row_count == 0:
+        context.log.error("No data found in the database or excel for the specified date range.") 
+        raise ValueError("No data found in the excel or database for the specified date range.")
+        
+    train_data['Date'] = pd.to_datetime(train_data['Date'])
+
+    parq_link = quick_save_parquet_link(
+        df=train_data,
+        config=conf,
+        context=context,
+        filename="RL_Training_data",
+        model_metadata=rl_model_metadata
+    )
+    context.add_output_metadata(
+        {
+            "row_count": MetadataValue.int(row_count),
+            "start_date": MetadataValue.text(train_start_date_str),
+            "end_date": MetadataValue.text(train_end_date_str),
+            "sample_head": MetadataValue.md(train_data.head().to_markdown()),
+            "Parquet_Training_Data_Link": MetadataValue.url(parq_link),
+            "source": MetadataValue.text(source),
+        }
+    )
+    return train_data
+
+
+@asset(group_name="rl_training")
+def test_data(context, rl_raw_data, training_config: TrainingConfig, rl_model_metadata):
+    conf = training_config.load()
+    cfg = conf['rl']
+
+    test_start_date_str = str(cfg["test_start_date"])
+    test_end_date_str = str(cfg["test_end_date"])
+    # Filter data based on the provided date range
+    test_data_excel = get_filtered_data(rl_raw_data, test_start_date_str, test_end_date_str)
+    excel_row_count = test_data_excel.shape[0]
+
+    test_data_db = get_data_from_db(start_date=test_start_date_str, end_date=test_end_date_str, context=context)
+    db_row_count = test_data_db.shape[0]
+    context.log.info(f"Excel row count: {excel_row_count}, DB row count: {db_row_count}")
+    if excel_row_count > db_row_count:
+        test_data = test_data_excel
+        row_count = excel_row_count
+        source = "Excel"
+    else:
+        test_data = test_data_db
+        row_count = db_row_count
+        source = "Database"
+        
+    context.log.info(f"Using {source} data with {row_count} rows for the test data.")
+
+    if row_count == 0:
+        context.log.info("No data found in the excel or db for the specified date range")
+        raise ValueError("No data found in the excel or database for the specified date range.")
+    
+    test_data['Date'] = pd.to_datetime(test_data['Date'])
+
+    parq_link = quick_save_parquet_link(
+        df=test_data,
+        config=conf,
+        context=context,
+        filename="RL_Test_data",
+        model_metadata=rl_model_metadata
+    )
+    context.add_output_metadata(
+        {
+            "row_count": MetadataValue.int(row_count),
+            "start_date": MetadataValue.text(test_start_date_str),
+            "end_date": MetadataValue.text(test_end_date_str),
+            "sample_head": MetadataValue.md(test_data.head().to_markdown()),
+            "Parquet_Test_Data_Link": MetadataValue.url(parq_link),
+            "source": MetadataValue.text(source),
+        }
+    )
+    return test_data
+
 

@@ -2,6 +2,10 @@ import random
 import datetime
 from datetime import timedelta
 
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+
+from rl_functions.trading_env import TradingEnv
 from trading_functions.db.session import SessionLocal
 from trading_functions.db.models import PriceData
 from trading_functions.inference.inf_functions import (
@@ -15,6 +19,8 @@ from trading_functions.common.indicators import (
     calculate_ATR
 )
 
+from mlflow_sb3callback import MLflowRLCallback
+
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 import numpy as np
@@ -25,6 +31,9 @@ from typing import Dict, Any
 import logging
 logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
+import mlflow
+from mlflow.tracking import MlflowClient
+import re
 
 load_dotenv()
 
@@ -153,21 +162,21 @@ def random_date(start_date, end_date):
     return start_date + datetime.timedelta(days=random.randint(0, delta_days))
 
 
-def get_closest_trading_date(db, symbol, target_date):
+def get_closest_trading_date(db, symbol, target_date, only_next=False):
 
     target_dt = datetime.datetime.combine(
         target_date, datetime.time(0, 0)
     )
-
-    prev_entry = (
-        db.query(PriceData.time)
-        .filter(
-            PriceData.symbol == symbol,
-            PriceData.time <= target_dt
+    if not only_next:
+        prev_entry = (
+            db.query(PriceData.time)
+            .filter(
+                PriceData.symbol == symbol,
+                PriceData.time <= target_dt
+            )
+            .order_by(PriceData.time.desc())
+            .first()
         )
-        .order_by(PriceData.time.desc())
-        .first()
-    )
 
     next_entry = (
         db.query(PriceData.time)
@@ -179,7 +188,7 @@ def get_closest_trading_date(db, symbol, target_date):
         .first()
     )
 
-    if prev_entry is None:
+    if prev_entry is None or only_next:
         return next_entry
     if next_entry is None:
         return prev_entry
@@ -190,24 +199,81 @@ def get_closest_trading_date(db, symbol, target_date):
     return prev_entry if prev_diff <= next_diff else next_entry
 
 
-def get_data(symbol: str, start_date: datetime.datetime, end_date: datetime.datetime, db: Session):
+
+def calculate_sharpe(returns, risk_free_rate=0.0):
+    returns = np.array(returns)
+    excess_returns = returns - risk_free_rate
+    if excess_returns.std() == 0:
+        return 0.0
+    return np.sqrt(252) * excess_returns.mean() / excess_returns.std()
+
+
+def get_env(config: dict, db: Session, eval_mode: bool=False):
+    """
+    Creates and returns a DummyVecEnv wrapped TradingEnv instance based on the provided configuration and database session.
+    If eval_mode is True, it sets up the environment for evaluation using test data; otherwise, it sets up for training using training data.
+    """
+    obs_features = get_observation_features(config)
+    start_date_config_key = 'train_start_date' if not eval_mode else 'test_start_date'
+    end_date_config_key = 'train_end_date' if not eval_mode else 'test_end_date' 
+    start_date = datetime.datetime.strptime(config['rl'][start_date_config_key], "%Y-%m-%d").date()
+    end_date = datetime.datetime.strptime(config['rl'][end_date_config_key], "%Y-%m-%d").date()
+    initial_balance = float(config['rl']['initial_balance'])
+    trade_fee = float(config['rl']['trade_fee'])
+    max_trade_loss_percent = float(config['rl']['max_trade_loss_percent'])
+    price_multiplier = float(config['rl']['price_multiplier'])
+
+
+    def make_env():
+        return TradingEnv(db=db,
+                          symbol='SPY',
+                          start_date=start_date,
+                          end_date=end_date,
+                          initial_balance=initial_balance,
+                          trade_fee=trade_fee,
+                          max_trade_loss_percent=max_trade_loss_percent,
+                          obs_features=obs_features,
+                          price_multiplier=price_multiplier,
+                            evaluation=eval_mode
+                          )
+    
+    return DummyVecEnv([make_env])
+   
+
+def get_data(symbol: str, start_date: datetime.datetime, end_date: datetime.datetime, db: Session, evaluation: bool = False):
     """
     Fetches all the 1 minute candle data for the given date and symbol for the whole day
     also includes the prediction date - high and low values in 2 separate columns
+    Returns the dataframe plus status code
+    Status code can be:
+    - OK
+    - NO_DATA_FOR_DATE
+    - END_DATE_REACHED (in case of evaluation and next day data not available)
+    - NO_ENOUGH_LAGGING_DATA (in case there is not enough lagging data to make prediction for the day)
     """
 
-    # Pick 1 random date between start_date and end_date
-    random_dt = random_date(start_date, end_date)
+    if evaluation:
+        print("Evaluation mode: ON")
+        next_date = start_date + timedelta(days=1)
+        next_avail_date = get_closest_trading_date(db, symbol, next_date, only_next=True)
+        if next_avail_date > end_date:
+            return pd.DataFrame(), "END_DATE_REACHED"
+        date_to_get = next_avail_date.time.date()
+        
+    else:
+        # Pick 1 random date between start_date and end_date
+        random_dt = random_date(start_date, end_date)
 
-    # Find closes trading date
-    trading_date_entry = get_closest_trading_date(db, symbol, random_dt)
+        # Find closes trading date
+        trading_date_entry = get_closest_trading_date(db, symbol, random_dt)
 
-    if trading_date_entry is None:
-        return ValueError(f"No trading data found for symbol {symbol} between {start_date} and {end_date}")
-    
-    date_to_get = trading_date_entry.time.date()
+        if trading_date_entry is None:
+            logger.warning(f"No trading data found for symbol {symbol} between {start_date} and {end_date}")
+            return pd.DataFrame(), "NO_DATA_FOR_DATE"
+        
+        date_to_get = trading_date_entry.time.date()
 
-    print(f"Selected trading date for data retrieval: {date_to_get}")
+        print(f"Selected trading date for data retrieval: {date_to_get}")
 
     slope_column_numbers = [3,9,39,99]
     inf_config = get_inf_config()
@@ -267,7 +333,7 @@ def get_data(symbol: str, start_date: datetime.datetime, end_date: datetime.date
     ).order_by(PriceData.time).all()
 
     if not price_data_query:
-        return pd.DataFrame()  # Return empty DataFrame if no data found
+        return pd.DataFrame(), "NO_DATA_FOR_DATE"  # Return empty DataFrame if no data found
 
     df = pd.DataFrame([{
         'Date': entry.time,
@@ -310,22 +376,6 @@ def get_data(symbol: str, start_date: datetime.datetime, end_date: datetime.date
         #print(f"Processing row {idx+1} of {len(df)}")
         current_row = df.iloc[idx]
 
-        # We are calculating the prediction for each candle using bulk prediction above
-        # pred_res = get_prediction_for_candle(
-        #     symbol=symbol,
-        #     db=db,
-        #     current_candle=current_row,
-        #     training_config=training_config,
-        #     model_high=model_high,
-        #     model_low=model_low,
-        #     scalers=scalers
-        # )
-
-        # df.at[idx, 'pred_high'] = pred_res['data'][0]
-        # df.at[idx, 'pred_low'] = pred_res['data'][1]
-        # Calculate slopes for last 2, 5, 10, and 20 close values
-        # df.at[idx, 'pred_high_diff'] = pred_res['data'][0] - current_row['Close']
-        # df.at[idx, 'pred_low_diff'] = current_row['Close'] - pred_res['data'][1]
         for window in slope_column_numbers:
             col_name = f'slope_last{window}close'
             if idx - window + 1 >= 0:
@@ -375,7 +425,7 @@ def get_data(symbol: str, start_date: datetime.datetime, end_date: datetime.date
     #print(df)
     df = calculate_ATR(df, inf_config['indicators']['parameters'], column='Close')
 
-    return df
+    return df, "OK"
 
 
 
@@ -402,3 +452,125 @@ def get_data_for_model_inference(inf_config: dict):
     )
     return scalers, training_config, model_high, model_low
 
+
+
+
+############ RL functions ##############
+
+def download_rl_mlflow_latest_version_artifact(config: dict, artifact_model_folder: str, run_id: str):
+    
+    client = MlflowClient()
+    tmp_dir = config['rl']['model_artifact_path']
+    local_dir = client.download_artifacts(run_id=run_id, path=artifact_model_folder, dst_path=tmp_dir)
+    model_name = config['rl']['model_name']
+    model_path = f"{local_dir}/artifacts/model.zip"
+    vec_path = f"{local_dir}/artifacts/vec_normalize.pkl"
+    # model_path = client.download_artifacts(run_id, "model.zip", dst_path=tmp_dir)
+    # vec_path = client.download_artifacts(run_id, "vec_normalize.pkl", dst_path=tmp_dir)
+    return model_path, vec_path
+
+
+def get_latest_checkpoint_rl(model_name: str):
+    client = MlflowClient()
+
+    versions = client.get_latest_versions(model_name)
+    if not versions:
+        return None
+    
+    latest_version = max(versions, key=lambda v: v.version)
+    run_id = latest_version.run_id
+
+    return run_id
+
+def get_latest_run_id_using_tag(model_name):
+    runs = mlflow.search_runs(
+        filter_string=f'tags.model_name = "{model_name}" AND tags.status = "IN_PROGRESS"',
+        order_by=["attributes.start_time DESC"],
+        max_results=1
+    )
+    return runs.iloc[0]['run_id'] if not runs.empty else None
+
+def get_latest_model_checkpoint_folder(run_id: str):
+    client = MlflowClient()
+    artifacts = client.list_artifacts(run_id)
+    step_folders = [f.path for f in artifacts if "model_step_" in f.path]
+
+    def get_step_num(path):
+        return int(re.search(r'model_step_(\d+)', path).group(1))
+    
+    latest_folder = max(step_folders, key=get_step_num) if step_folders else None
+    return latest_folder
+
+
+def load_checkpoint(run_id: str, env, config: dict, db: Session):
+    model_path, vec_path = download_rl_mlflow_latest_version_artifact(config, db, run_id)
+    model = PPO.load(model_path, env=env)
+    env = VecNormalize.load(vec_path, env=env)
+
+    return model, env
+
+
+def get_latest_timestep(run_id: str):
+    run = mlflow.get_run(run_id)
+    latest_time_steps = run.data.metrics['timestep']
+    return latest_time_steps
+
+
+def do_training_with_resume(config: dict, db: Session, artifact_save_local_path: str):
+
+    mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
+    ml_client = MlflowClient()
+    run_id = get_latest_run_id_using_tag(model_name=config['rl']['model_name'])
+
+    env = get_env(config=config, db=db, eval_mode=False)
+    if run_id:
+        print(f"Resuming training from checkpoint with run_id: {run_id}")
+        mlflow.start_run(run_id=run_id)
+        latest_timestep = get_latest_timestep(run_id)
+        # model, env = load_checkpoint(run_id, env, config, db)
+        latest_artifact_folder = get_latest_model_checkpoint_folder(run_id)
+        model_path, vec_path = download_rl_mlflow_latest_version_artifact(config=config,
+                                                                          artifact_model_folder=latest_artifact_folder, 
+                                                                          run_id=run_id)
+        model = PPO.load(model_path, env=env)
+        env = VecNormalize.load(vec_path, env=env)
+
+    else:
+        print("No checkpoint found. Starting training from scratch.")
+        latest_timestep = 0
+        mlflow.start_run(run_name=f"RL_Training_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}", tags={"model_name": config['rl']['model_name'], "status": "IN_PROGRESS"})
+        run_id = mlflow.active_run().info.run_id
+        model = PPO(
+            policy='MlpPolicy',
+            env=env,
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=128,
+            gamma=0.98,
+            gae_lambda=0.95,
+            clip_range=0.2,
+            ent_coef=0.01,
+            verbose=1,
+        )
+
+    total_target_timesteps = config['rl']['total_timesteps']
+    remaining_timesteps = total_target_timesteps - latest_timestep
+
+    mlflow_callback = MLflowRLCallback(
+        run_id=run_id,
+        artifact_subdir=artifact_save_local_path,
+        model_name=config['rl']['model_name'],
+        db=db,
+        config=config
+    )
+    model.learn(total_timesteps=remaining_timesteps, 
+                reset_num_timesteps=False,
+                callback=mlflow_callback
+    )
+
+    model.save("ppo_trading_agent")
+    env.save("vec_normalize_trading_env.pkl")
+
+
+
+################ End of RL Functions ################
