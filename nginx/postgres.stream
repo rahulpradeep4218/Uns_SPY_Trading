@@ -9,6 +9,5 @@ server {
     proxy_pass postgres_upstream;
 
     # (Optional) restrict access by IP
-    allow 192.168.0.0/16;  # or your LAN subnet
-    deny all;
+    allow all;
 }

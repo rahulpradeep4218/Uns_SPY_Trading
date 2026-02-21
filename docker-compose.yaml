@@ -78,7 +78,6 @@ services:
       POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
       MLFLOW_POSTGRES_DB: ${MLFLOW_POSTGRES_DB}
       DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
-
     networks:
       - app_network
     healthcheck:
