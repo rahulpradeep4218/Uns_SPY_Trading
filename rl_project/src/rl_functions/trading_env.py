@@ -222,8 +222,9 @@ class TradingEnv(gym.Env):
 
         # ---- Reward Calculation ----
         total_pnl = self.pnl + self.active_pnl
-        reward = total_pnl - self.prev_total_pnl
-        self.prev_total_pnl = total_pnl
+        current_reward = np.power(total_pnl, 3) / 1000
+        reward = current_reward - self.prev_total_pnl
+        self.prev_total_pnl = current_reward
 
         # Update balance and calculate drawdown
         current_balance = self.balance + total_pnl
