@@ -22,6 +22,10 @@ from trading_functions.training.ml_pipeline import (
     get_data_from_db,
 )
 
+from rl_functions.utils import (
+    do_training_with_resume
+)
+
 import mlflow
 
 
@@ -509,7 +513,8 @@ def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_res
     conf = training_config.load()
     
   
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
+    context.log.info(f"MLFlow experiment id : {exp_id}")
     run_name = mlflow_resource.run_name
     model_name = mlflow_resource.model_name
 
@@ -518,7 +523,7 @@ def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_res
     #context.log.info(f"MLflow artifact URI: {artifact_uri}")
     if mlflow.active_run() is not None:
         context.log.warning("There is an active MLflow run. It will be ended before starting a new one.")
-        mlf.end_run()
+        mlflow.end_run()
     with mlflow.start_run(run_name=run_name, experiment_id=exp_id) as run:
         run_id = run.info.run_id
         context.log.info(f"Parent run started with ID: {run_id}")
@@ -550,7 +555,7 @@ def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_hi
     """
     conf = training_config.load()
     parent_run_id = start_mlflow_parent_run['parent_run_id']
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
     mlflow_resource_dict = {
         'parent_run_id': parent_run_id,
         'experiment_id': exp_id,
@@ -582,7 +587,7 @@ def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low
     """
     conf = training_config.load()
     run_id = start_mlflow_parent_run['parent_run_id']
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
     mlflow_resource_dict = {
         'parent_run_id': run_id,
         'experiment_id': exp_id,
@@ -851,7 +856,7 @@ def rl_model_metadata(context, training_config: TrainingConfig) -> dict:
         MaterializeResult: Metadata for the model run.
     """
     conf = training_config.load()
-    cfg = conf['training_details']
+    cfg = conf['rl']
     model_id = generate_model_id(model_name=cfg['model_name'])
     context.log.info(f"RL Model id: {model_id}")
     rl_model_metadata_dict = {'model_id': model_id,}
@@ -859,144 +864,15 @@ def rl_model_metadata(context, training_config: TrainingConfig) -> dict:
 
 
 @asset(group_name="rl_training")
-def rl_raw_data(context, training_config: TrainingConfig, rl_model_metadata) -> pd.DataFrame:
-    """
-    Load the complete data from an Excel file
-    
-    Args:
-        sheet_names (str): Comma-separated string of sheet names to load.
-        all_data_path (str): Path to the Excel file.
-
-    Returns:
-        pd.DataFrame:  DataFrame containing the loaded data.
-    """
-    conf = training_config.load()
-    cfg = conf['training_details']
-    # Split the sheet names into a list
-    sheet_names = cfg["sheet_names"]
-    all_data_path = cfg["all_data_path"]
-
-    sheet_names = [sheet.strip() for sheet in sheet_names.split(",")]
-    context.log.info(f"Config training details: {cfg}")
-    # Load data from the specified sheets
-    data = pd.concat(pd.read_excel(all_data_path, sheet_name=sheet_names), ignore_index=True)
-
-    # Convert 'Date' column to datetime format
-    data['Date'] = pd.to_datetime(data['Date'])
-
-    #Remove symbol column
-    data.drop(columns=['Symbol'], inplace=True)
-    
-    row_count = data.shape[0]
-    context.log.info(f"Number of rows in the filtered data: {row_count}")
-
-    context.add_output_metadata(
-        {
-            "row_count": MetadataValue.int(row_count),
-            "sample_head": MetadataValue.md(data.head().to_markdown()),
-        }
-    )
-    return data
-
-
-@asset(group_name="rl_training")
-def rl_training_data(context, rl_raw_data, training_config: TrainingConfig, rl_model_metadata):
+def train_rl(context, training_config: TrainingConfig, rl_model_metadata):
     conf = training_config.load()
     cfg = conf['rl']
+    context.log.info(f"Going to start Reinforcement learning training with checkpoint frequency : {cfg['checkpoint_freq']} and episode metric frequency : every {cfg['episode_metrics_freq']} episodes." + 
+                     f"Timesteps : {cfg['total_timesteps']} and initial balance : {cfg['initial_balance']}")
 
-    train_start_date_str = str(cfg["train_start_date"])
-    train_end_date_str = str(cfg["train_end_date"])
-    # Filter data based on the provided date range
-    train_data_excel = get_filtered_data(rl_raw_data, train_start_date_str, train_end_date_str)
-    excel_row_count = train_data_excel.shape[0]
-
-    train_data_db = get_data_from_db(start_date=train_start_date_str, end_date=train_end_date_str, context=context)
-    db_row_count = train_data_db.shape[0]
-
-    if excel_row_count > db_row_count:
-        train_data = train_data_excel
-        row_count = excel_row_count
-        source = "Excel"
-    else:
-        train_data = train_data_db
-        row_count = db_row_count
-        source = "Database"
-    context.log.info(f"Using {source} data with {row_count} rows for the training data.")
-
-    if row_count == 0:
-        context.log.error("No data found in the database or excel for the specified date range.") 
-        raise ValueError("No data found in the excel or database for the specified date range.")
-        
-    train_data['Date'] = pd.to_datetime(train_data['Date'])
-
-    parq_link = quick_save_parquet_link(
-        df=train_data,
+    do_training_with_resume(
         config=conf,
-        context=context,
-        filename="RL_Training_data",
+        dagster_context=context,
         model_metadata=rl_model_metadata
     )
-    context.add_output_metadata(
-        {
-            "row_count": MetadataValue.int(row_count),
-            "start_date": MetadataValue.text(train_start_date_str),
-            "end_date": MetadataValue.text(train_end_date_str),
-            "sample_head": MetadataValue.md(train_data.head().to_markdown()),
-            "Parquet_Training_Data_Link": MetadataValue.url(parq_link),
-            "source": MetadataValue.text(source),
-        }
-    )
-    return train_data
-
-
-@asset(group_name="rl_training")
-def test_data(context, rl_raw_data, training_config: TrainingConfig, rl_model_metadata):
-    conf = training_config.load()
-    cfg = conf['rl']
-
-    test_start_date_str = str(cfg["test_start_date"])
-    test_end_date_str = str(cfg["test_end_date"])
-    # Filter data based on the provided date range
-    test_data_excel = get_filtered_data(rl_raw_data, test_start_date_str, test_end_date_str)
-    excel_row_count = test_data_excel.shape[0]
-
-    test_data_db = get_data_from_db(start_date=test_start_date_str, end_date=test_end_date_str, context=context)
-    db_row_count = test_data_db.shape[0]
-    context.log.info(f"Excel row count: {excel_row_count}, DB row count: {db_row_count}")
-    if excel_row_count > db_row_count:
-        test_data = test_data_excel
-        row_count = excel_row_count
-        source = "Excel"
-    else:
-        test_data = test_data_db
-        row_count = db_row_count
-        source = "Database"
-        
-    context.log.info(f"Using {source} data with {row_count} rows for the test data.")
-
-    if row_count == 0:
-        context.log.info("No data found in the excel or db for the specified date range")
-        raise ValueError("No data found in the excel or database for the specified date range.")
-    
-    test_data['Date'] = pd.to_datetime(test_data['Date'])
-
-    parq_link = quick_save_parquet_link(
-        df=test_data,
-        config=conf,
-        context=context,
-        filename="RL_Test_data",
-        model_metadata=rl_model_metadata
-    )
-    context.add_output_metadata(
-        {
-            "row_count": MetadataValue.int(row_count),
-            "start_date": MetadataValue.text(test_start_date_str),
-            "end_date": MetadataValue.text(test_end_date_str),
-            "sample_head": MetadataValue.md(test_data.head().to_markdown()),
-            "Parquet_Test_Data_Link": MetadataValue.url(parq_link),
-            "source": MetadataValue.text(source),
-        }
-    )
-    return test_data
-
 

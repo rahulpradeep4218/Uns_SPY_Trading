@@ -744,7 +744,7 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
         model_metadata=model_metadata
     )
     run_ids = [high_model_info['mlflow_run_id'], low_model_info['mlflow_run_id']]
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
     dagster_run_id = context.run_id
     artifact_path = get_dagster_run_id_path(
         config=config,

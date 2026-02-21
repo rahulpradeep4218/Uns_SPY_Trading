@@ -43,6 +43,12 @@ ARG DAGSTER_TRADING_FUNCTIONS_PATH
 COPY ${DAGSTER_TRADING_FUNCTIONS_PATH} /opt/trading_functions
 RUN pip install /opt/trading_functions
 
+#Install RL functions library
+WORKDIR /opt
+ARG DAGSTER_RL_FUNCTIONS_PATH
+COPY ${DAGSTER_RL_FUNCTIONS_PATH} /opt/rl_functions
+RUN pip install /opt/rl_functions
+
 # Add code location code
 RUN mkdir -p ${CODE_LOC}
 ARG DAGSTER_CODE_LOCATION

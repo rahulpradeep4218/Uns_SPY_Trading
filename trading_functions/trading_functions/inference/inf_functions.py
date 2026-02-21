@@ -19,36 +19,53 @@ load_dotenv()
 
 def scale_for_inference(data, config, scalers):
     scale_cfg = config['scaling']
-
+    label_features = ['High_Label', 'Low_Label']
     minmax_features = get_columns_mapping(scale_cfg['minmax']['columns'], config)
     standard_features = get_columns_mapping(scale_cfg['standard']['columns'], config)
     robust_features = get_columns_mapping(scale_cfg['robust']['columns'], config)
 
     fourier_columns = get_fourier_columns(config)
+    label_scale = config['common_config']['label_scale']
 
-    if scalers['minmax'] is not None and len(minmax_features) > 0:
+    # Add dummy label columns as scalers have them in their feature list, but they won't be used for scaling
+    for label in label_features:
+        data[label] = 0.0
+
+    if (scalers['minmax'] is not None and len(minmax_features) > 0) or (label_scale == 'minmax'):
         if 'fourier' in minmax_features:
             minmax_features = [f for f in minmax_features if f != 'fourier'] + fourier_columns
         logger.debug(f"Applying Transform Min-Max scaling to features: {minmax_features}")
+        if label_scale == 'minmax':
+            logger.debug(f"Applying Min-Max scaling to label features: {label_features}")
+            minmax_features.extend(label_features)
         data[minmax_features] = scalers['minmax'].transform(data[minmax_features])
     else:
         logger.debug("No Min-Max scaler found or no features to scale.")
     #Standard scaling
-    if scalers['standard'] is not None and len(standard_features) > 0:
+    if (scalers['standard'] is not None and len(standard_features) > 0) or (label_scale == 'standard'):
         if 'fourier' in standard_features:
             standard_features = [f for f in standard_features if f != 'fourier'] + fourier_columns
         logger.debug(f"Applying Transform Standard scaling to features: {standard_features}")
+        if label_scale == 'standard':
+            logger.debug(f"Applying Standard scaling to label features: {label_features}")
+            standard_features.extend(label_features)
         data[standard_features] = scalers['standard'].transform(data[standard_features])
     else:
         logger.debug("No Standard scaler found or no features to scale.")
     #Robust Scaling
-    if scalers['robust'] is not None and len(robust_features) > 0:
+    if (scalers['robust'] is not None and len(robust_features) > 0) or (label_scale == 'robust'):
         if 'fourier' in robust_features:
             robust_features = [f for f in robust_features if f != 'fourier'] + fourier_columns
         logger.debug(f"Applying Transform Robust scaling to features: {robust_features}")
+        if label_scale == 'robust':
+            logger.debug(f"Applying Robust scaling to label features: {label_features}")
+            robust_features.extend(label_features)
         data[robust_features] = scalers['robust'].transform(data[robust_features])
     else:
         logger.debug("No Robust scaler found or no features to scale.")
+    data.drop(columns=label_features, inplace=True)
+
+    return data
 
 def get_model_from_mlflow(config, model_name="", model_version=None):
     mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
@@ -162,7 +179,7 @@ def transform_for_inference(data, config, scalers):
     logger.info(f"Data shape before scaling: {data.shape}")
 
     # Scale features
-    scale_for_inference(data, config, scalers)
+    data = scale_for_inference(data, config, scalers)
 
     logger.debug("Data transformation for inference completed.")
     return data
@@ -185,21 +202,40 @@ def get_prediction(data, model_high, model_low, training_config, scalers):
     buy_vals = model_high.predict(features_row)
     sell_vals = model_low.predict(features_row)
 
-    buy_take, sell_take = buy_vals[0][0], sell_vals[0][0]
-    buy_stop, sell_stop = sell_vals[0][1], buy_vals[0][1]
+    low_label_index = -1
+    high_label_index = -2
+
+    # buy_take, sell_take = buy_vals[0][0], sell_vals[0][0]
+    # buy_stop, sell_stop = sell_vals[0][1], buy_vals[0][1]
+    buy_take, sell_take = buy_vals[0], sell_vals[0]
     label_scaling_multiplier = training_config['common_config']['label_scaling_multiplier']
+    label_scale = training_config['common_config']['label_scale']
 
-    buy_take = buy_take * current_close / label_scaling_multiplier
-    buy_take = buy_take + current_close
+    # buy_take = buy_take * current_close / label_scaling_multiplier
+    # buy_take = buy_take + current_close
 
-    sell_take = sell_take * current_close / label_scaling_multiplier
-    sell_take = current_close - sell_take
+    # sell_take = sell_take * current_close / label_scaling_multiplier
+    # sell_take = current_close - sell_take
 
-    buy_stop = buy_stop * current_close / label_scaling_multiplier
-    buy_stop = current_close - buy_stop
+    # buy_stop = buy_stop * current_close / label_scaling_multiplier
+    # buy_stop = current_close - buy_stop
 
-    sell_stop = sell_stop * current_close / label_scaling_multiplier
-    sell_stop = sell_stop + current_close
+    # sell_stop = sell_stop * current_close / label_scaling_multiplier
+    # sell_stop = sell_stop + current_close
+
+    if label_scale == 'standard':
+        buy_take = buy_take * scalers[label_scale].scale_[high_label_index] + scalers[label_scale].mean_[high_label_index]
+        sell_take = sell_take * scalers[label_scale].scale_[low_label_index] + scalers[label_scale].mean_[low_label_index]
+
+    elif label_scale == 'robust':
+        buy_take = buy_take * scalers[label_scale].scale_[high_label_index] + scalers[label_scale].center_[high_label_index]
+        sell_take = sell_take * scalers[label_scale].scale_[low_label_index] + scalers[label_scale].center_[low_label_index]
+
+    buy_take = ( buy_take * current_close ) + current_close
+    sell_take = current_close - ( sell_take * current_close )
+
+    buy_stop = sell_take
+    sell_stop = buy_take
     return {
         "buy_take": buy_take,
         "buy_stop": buy_stop,
@@ -214,6 +250,8 @@ def get_bulk_prediction(data, model_high, model_low, training_config, scalers):
     Get predictions from the high and low models for all rows in the data.
     """
     data = transform_for_inference(data=data.copy(), config=training_config, scalers=scalers)
+    print(f"Data shape after transformation: {data.shape}")
+    print(data.head())
     all_features = get_all_training_features(training_config)
     
     current_closes = data['Close'].values
@@ -222,17 +260,32 @@ def get_bulk_prediction(data, model_high, model_low, training_config, scalers):
     buy_vals = model_high.predict(features)
     sell_vals = model_low.predict(features)
     
-    buy_takes = buy_vals[:, 0]
-    sell_takes = sell_vals[:, 0]
-    buy_stops = sell_vals[:, 1]
-    sell_stops = buy_vals[:, 1]
+    buy_takes = buy_vals
+    sell_takes = sell_vals
+    buy_stops = sell_vals
+    sell_stops = buy_vals
     
     label_scaling_multiplier = training_config['common_config']['label_scaling_multiplier']
+    label_scale = training_config['common_config']['label_scale']
+
+    low_label_index = -1
+    high_label_index = -2
     
-    buy_takes = (buy_takes * current_closes / label_scaling_multiplier) + current_closes
-    sell_takes = current_closes - (sell_takes * current_closes / label_scaling_multiplier)
-    buy_stops = current_closes - (buy_stops * current_closes / label_scaling_multiplier)
-    sell_stops = (sell_stops * current_closes / label_scaling_multiplier) + current_closes
+    # buy_takes = (buy_takes * current_closes / label_scaling_multiplier) + current_closes
+    # sell_takes = current_closes - (sell_takes * current_closes / label_scaling_multiplier)
+    # buy_stops = current_closes - (buy_stops * current_closes / label_scaling_multiplier)
+    # sell_stops = (sell_stops * current_closes / label_scaling_multiplier) + current_closes
+
+    if label_scale == 'standard':
+        buy_takes = buy_takes * scalers[label_scale].scale_[high_label_index] + scalers[label_scale].mean_[high_label_index]
+        sell_takes = sell_takes * scalers[label_scale].scale_[low_label_index] + scalers[label_scale].mean_[low_label_index]
+
+    elif label_scale == 'robust':
+        buy_takes = buy_takes * scalers[label_scale].scale_[high_label_index] + scalers[label_scale].center_[high_label_index]
+        sell_takes = sell_takes * scalers[label_scale].scale_[low_label_index] + scalers[label_scale].center_[low_label_index]
+
+    buy_takes = ( buy_takes * current_closes ) + current_closes
+    sell_takes = current_closes - ( sell_takes * current_closes )
 
     data['pred_high'] = buy_takes
     data['pred_low'] = sell_takes
