@@ -104,6 +104,7 @@ def get_scaler_path(config, model_metadata):
     return scaler_file_path
 
 
+
 def scale_features(df, config, context, model_metadata, train_or_test='train', scaler_path = ''):
     scale_cfg = config['scaling']
     
@@ -743,7 +744,7 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
         model_metadata=model_metadata
     )
     run_ids = [high_model_info['mlflow_run_id'], low_model_info['mlflow_run_id']]
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
     dagster_run_id = context.run_id
     artifact_path = get_dagster_run_id_path(
         config=config,
@@ -778,4 +779,6 @@ def get_model_evaluation(context, config, input_output_df_test:dict, models:dict
         }
     )
     return output_df
+
+
 

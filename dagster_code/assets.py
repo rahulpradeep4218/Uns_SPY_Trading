@@ -1,4 +1,4 @@
-from dagster import asset, MetadataValue, MaterializeResult
+from dagster import asset, MetadataValue
 import pandas as pd
 
 from trading_functions.common.transform import normalize_timegaps, close_diff_transform
@@ -7,7 +7,6 @@ from resources import TrainingConfig, MLFlowResource
 from trading_functions.training.utility import (
     save_df_parquet_link, 
     generate_model_id, 
-    get_first_directory,
     get_all_training_features
 )
 
@@ -16,7 +15,6 @@ from trading_functions.training.ml_pipeline import (
     quick_save_parquet_link,
     add_labels_high_low,
     get_train_test_split,
-    get_quantile_dmatrix,
     optimize_parameters,
     train_model,
     scale_features,
@@ -24,13 +22,15 @@ from trading_functions.training.ml_pipeline import (
     get_data_from_db,
 )
 
-from datetime import datetime
-import os
+from rl_functions.utils import (
+    do_training_with_resume
+)
+
 import mlflow
 
 
 
-@asset
+@asset(group_name="model_training")
 def model_metadata(context, training_config: TrainingConfig) -> dict:
     """
     Create metadata for the model run.
@@ -49,7 +49,7 @@ def model_metadata(context, training_config: TrainingConfig) -> dict:
     return model_metadata_dict
 
 
-@asset
+@asset(group_name="model_training")
 def raw_data(context, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Load the complete data from an Excel file
@@ -97,7 +97,7 @@ def raw_data(context, training_config: TrainingConfig, model_metadata) -> pd.Dat
     return data
 
 
-@asset
+@asset(group_name="model_training")
 def training_data(context, raw_data, training_config: TrainingConfig, model_metadata):
     conf = training_config.load()
     cfg = conf['training_details']
@@ -147,7 +147,7 @@ def training_data(context, raw_data, training_config: TrainingConfig, model_meta
     return train_data
 
 
-@asset
+@asset(group_name="model_training")
 def test_data(context, raw_data, training_config: TrainingConfig, model_metadata):
     conf = training_config.load()
     cfg = conf['training_details']
@@ -198,7 +198,7 @@ def test_data(context, raw_data, training_config: TrainingConfig, model_metadata
     return test_data
 
 
-@asset
+@asset(group_name="model_training")
 def normalize_timegaps_training(context, training_data: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Normalize time gaps in the loaded data.
@@ -235,7 +235,7 @@ def normalize_timegaps_training(context, training_data: pd.DataFrame, training_c
     return normalized_data
 
 
-@asset
+@asset(group_name="model_training")
 def add_indicators_training(context, normalize_timegaps_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add technical indicators to the loaded data.
@@ -274,7 +274,7 @@ def add_indicators_training(context, normalize_timegaps_training: pd.DataFrame, 
     
     return data_with_indicators
 
-@asset
+@asset(group_name="model_training")
 def close_diff_transform_training(context, add_indicators_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Transform some columns by calculating the difference with Close column.
@@ -312,7 +312,7 @@ def close_diff_transform_training(context, add_indicators_training: pd.DataFrame
     )
     return transformed_data
 
-@asset
+@asset(group_name="model_training")
 def add_labels_training(context, close_diff_transform_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add labels for high and low prices based on the configuration.
@@ -343,7 +343,7 @@ def add_labels_training(context, close_diff_transform_training: pd.DataFrame, tr
     )
     return labeled_data
 
-@asset
+@asset(group_name="model_training")
 def scale_data_training(context, add_labels_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Scale the data using Min-Max scaling.
@@ -368,7 +368,7 @@ def scale_data_training(context, add_labels_training: pd.DataFrame, training_con
 
 
 
-@asset
+@asset(group_name="model_training")
 def input_output_df_training(context, scale_data_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> dict:
 
     conf = training_config.load()
@@ -407,7 +407,7 @@ def input_output_df_training(context, scale_data_training: pd.DataFrame, trainin
     return output_dict
 
 
-@asset
+@asset(group_name="model_training")
 def train_test_split_high_model(context, input_output_df_training: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Split the data into training and testing sets for the buy model.
@@ -429,7 +429,7 @@ def train_test_split_high_model(context, input_output_df_training: dict, trainin
     
     return output_dict
 
-@asset
+@asset(group_name="model_training")
 def train_test_split_low_model(context, input_output_df_training: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Split the data into training and testing sets for the sell model.
@@ -452,7 +452,7 @@ def train_test_split_low_model(context, input_output_df_training: dict, training
     return output_dict
 
 
-@asset
+@asset(group_name="model_training")
 def hyperparameter_tuning_high(context, train_test_split_high_model: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Perform hyperparameter tuning for the buy model.
@@ -476,7 +476,7 @@ def hyperparameter_tuning_high(context, train_test_split_high_model: dict, train
     return best_params
 
 
-@asset
+@asset(group_name="model_training")
 def hyperparameter_tuning_low(context, train_test_split_low_model: dict, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Perform hyperparameter tuning for the sell model.
@@ -499,7 +499,7 @@ def hyperparameter_tuning_low(context, train_test_split_low_model: dict, trainin
     
     return best_params
 
-@asset
+@asset(group_name="model_training")
 def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_resource: MLFlowResource, hyperparameter_tuning_high: dict, hyperparameter_tuning_low: dict) -> dict:
     """
     Start a parent run for the training pipeline.
@@ -513,7 +513,8 @@ def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_res
     conf = training_config.load()
     
   
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
+    context.log.info(f"MLFlow experiment id : {exp_id}")
     run_name = mlflow_resource.run_name
     model_name = mlflow_resource.model_name
 
@@ -522,7 +523,7 @@ def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_res
     #context.log.info(f"MLflow artifact URI: {artifact_uri}")
     if mlflow.active_run() is not None:
         context.log.warning("There is an active MLflow run. It will be ended before starting a new one.")
-        mlf.end_run()
+        mlflow.end_run()
     with mlflow.start_run(run_name=run_name, experiment_id=exp_id) as run:
         run_id = run.info.run_id
         context.log.info(f"Parent run started with ID: {run_id}")
@@ -540,7 +541,7 @@ def start_mlflow_parent_run(context, training_config: TrainingConfig, mlflow_res
     return output_dict
 
 
-@asset
+@asset(group_name="model_training")
 def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_high_model: dict, hyperparameter_tuning_high: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource, model_metadata) -> dict:
     """
     Train the buy model using the best hyperparameters.
@@ -554,7 +555,7 @@ def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_hi
     """
     conf = training_config.load()
     parent_run_id = start_mlflow_parent_run['parent_run_id']
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
     mlflow_resource_dict = {
         'parent_run_id': parent_run_id,
         'experiment_id': exp_id,
@@ -572,7 +573,7 @@ def train_model_high(context, start_mlflow_parent_run: dict, train_test_split_hi
     return xgb_model_high_info  
 
 
-@asset
+@asset(group_name="model_training")
 def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low_model: dict, hyperparameter_tuning_low: dict, training_config: TrainingConfig, mlflow_resource: MLFlowResource, model_metadata) -> dict:
     """
     Train the sell model using the best hyperparameters.
@@ -586,7 +587,7 @@ def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low
     """
     conf = training_config.load()
     run_id = start_mlflow_parent_run['parent_run_id']
-    exp_id = mlflow_resource.experiment_id
+    exp_id = mlflow_resource.get_experiment_id()
     mlflow_resource_dict = {
         'parent_run_id': run_id,
         'experiment_id': exp_id,
@@ -604,7 +605,7 @@ def train_model_low(context, start_mlflow_parent_run: dict, train_test_split_low
     
     return xgb_model_low_info
 
-@asset
+@asset(group_name="model_training")
 def normalize_timegaps_test(context, test_data: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Normalize time gaps in the test data.
@@ -641,7 +642,7 @@ def normalize_timegaps_test(context, test_data: pd.DataFrame, training_config: T
     
     return normalized_data
 
-@asset
+@asset(group_name="model_training")
 def add_indicators_test(context, normalize_timegaps_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add technical indicators to the test data.
@@ -678,7 +679,7 @@ def add_indicators_test(context, normalize_timegaps_test: pd.DataFrame, training
     
     return data_with_indicators
 
-@asset
+@asset(group_name="model_training")
 def close_diff_transform_test(context, add_indicators_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Transform some columns by calculating the difference with Close column in the test data.
@@ -715,7 +716,7 @@ def close_diff_transform_test(context, add_indicators_test: pd.DataFrame, traini
     )   
     return transformed_data
 
-@asset
+@asset(group_name="model_training")
 def add_labels_test(context, close_diff_transform_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Add labels for high and low prices based on the configuration in the test data.
@@ -749,7 +750,7 @@ def add_labels_test(context, close_diff_transform_test: pd.DataFrame, training_c
     return labeled_data
 
 
-@asset
+@asset(group_name="model_training")
 def scale_data_test(context, add_labels_test: pd.DataFrame, scale_data_training: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> pd.DataFrame:
     """
     Scale the test data using Min-Max scaling.
@@ -772,7 +773,7 @@ def scale_data_test(context, add_labels_test: pd.DataFrame, scale_data_training:
 
     return scaled_data
 
-@asset
+@asset(group_name="model_training")
 def input_output_df_test(context, scale_data_test: pd.DataFrame, training_config: TrainingConfig, model_metadata) -> dict:
     """
     Prepare input and output DataFrames for the test data.
@@ -818,7 +819,7 @@ def input_output_df_test(context, scale_data_test: pd.DataFrame, training_config
 
     return output_dict
 
-@asset
+@asset(group_name="model_training")
 def evaluate_model(context, input_output_df_test: dict, scale_data_test:pd.DataFrame, train_model_high, train_model_low, mlflow_resource:MLFlowResource, training_config: TrainingConfig, model_metadata, start_mlflow_parent_run) -> pd.DataFrame:
     models_dict = {
         'train_model_high': train_model_high,
@@ -837,4 +838,41 @@ def evaluate_model(context, input_output_df_test: dict, scale_data_test:pd.DataF
         original_data=scale_data_test
     )
     return evaluation_results
+
+
+
+################################# Assets for reinforcement Learning Pipeline ############################
+
+
+@asset(group_name="rl_training")
+def rl_model_metadata(context, training_config: TrainingConfig) -> dict:
+    """
+    Create metadata for the model run.
+    
+    Args:
+        training_config (TrainingConfig): Configuration for the training run.
+
+    Returns:
+        MaterializeResult: Metadata for the model run.
+    """
+    conf = training_config.load()
+    cfg = conf['rl']
+    model_id = generate_model_id(model_name=cfg['model_name'])
+    context.log.info(f"RL Model id: {model_id}")
+    rl_model_metadata_dict = {'model_id': model_id,}
+    return rl_model_metadata_dict
+
+
+@asset(group_name="rl_training")
+def train_rl(context, training_config: TrainingConfig, rl_model_metadata):
+    conf = training_config.load()
+    cfg = conf['rl']
+    context.log.info(f"Going to start Reinforcement learning training with checkpoint frequency : {cfg['checkpoint_freq']} and episode metric frequency : every {cfg['episode_metrics_freq']} episodes." + 
+                     f"Timesteps : {cfg['total_timesteps']} and initial balance : {cfg['initial_balance']}")
+
+    do_training_with_resume(
+        config=conf,
+        dagster_context=context,
+        model_metadata=rl_model_metadata
+    )
 

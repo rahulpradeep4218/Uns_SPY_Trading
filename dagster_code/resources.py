@@ -1,6 +1,5 @@
-from logging import config
 import yaml
-from dagster import ConfigurableResource, resource
+from dagster import ConfigurableResource
 import mlflow
 
 class TrainingConfig(ConfigurableResource):
@@ -24,7 +23,14 @@ class MLFlowResource(ConfigurableResource):
     """
     MLflow as a resource for tracking experiments.
     """
+    tracking_uri: str
     experiment_name: str
     model_name: str
-    experiment_id: str = None
     run_name: str = None
+
+    def get_experiment_id(self):
+        mlflow.set_tracking_uri(self.tracking_uri)
+        exp = mlflow.get_experiment_by_name(self.experiment_name)
+        if exp is None:
+            return mlflow.create_experiment(self.experiment_name)
+        return exp.experiment_id
