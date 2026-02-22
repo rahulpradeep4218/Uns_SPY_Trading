@@ -89,6 +89,16 @@ class MLflowRLCallback(BaseCallback):
                         pnl_metrics.calculate_sortino(),
                         step=self.num_timesteps
                     )
+                    mlflow.log_metric(
+                        "winning_trades",
+                        info['winning_trades'],
+                        step=self.num_timesteps
+                    )
+                    mlflow.log_metric(
+                        "losing_trades",
+                        info['losing_trades'],
+                        step=self.num_timesteps
+                    )
             
             if dones[0]:
                 self.pnl_list = [0.0]  # Reset PnL list for next episode
@@ -112,7 +122,7 @@ class MLflowRLCallback(BaseCallback):
 
         #Sawtooth logic to update ent coeff so only spike at 0.04
         fraction = cycle_pos / cycle_steps
-        new_ent_coeff = 0.04 - (0.03 * fraction)  # Linearly decrease from 0.04 to 0.01
+        new_ent_coeff = 0.03 - (0.02 * fraction)  # Linearly decrease from 0.03 to 0.01
 
         #Update ent coeff in the model's policy
         self.model.ent_coeff = max(new_ent_coeff, 0.01)  # Ensure it doesn't go below 0.01
@@ -190,6 +200,16 @@ class MLflowRLCallback(BaseCallback):
         mlflow.log_metric(
             "eval_max_drawdown_percent",
             info.get("max_drawdown_percent"),
+            step=self.eval_num
+        )
+        mlflow.log_metric(
+            "eval_winning_trades",
+            info.get("winning_trades"),
+            step=self.eval_num
+        )
+        mlflow.log_metric(
+            "eval_losing_trades",
+            info.get("losing_trades"),
             step=self.eval_num
         )
         self.eval_num += 1

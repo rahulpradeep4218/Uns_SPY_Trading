@@ -37,6 +37,11 @@ class TradingEnv(gym.Env):
         self.price_multiplier = price_multiplier    
         self.evaluation = evaluation
         self.logger = logger
+        self.pnl_history = []
+        self.prev_active_pnl = 0.0
+        self.total_intermediate_given = 0.0
+        self.winning_trades = 0
+        self.losing_trades = 0
 
         # Actions
         self.action_space = spaces.Discrete(4)  # Buy Call, Buy Put, Hold, Sell
@@ -65,7 +70,7 @@ class TradingEnv(gym.Env):
             self.logger.info(f"Data time range : {self.data['Date'].iloc[0]} to {self.data['Date'].iloc[-1]}")
         self.pnl = 0.0
         self.active_pnl = 0.0
-        self.prev_total_pnl = 0.0
+        self.prev_active_pnl = 0.0
         self.balance = self.initial_balance
         self.peak_balance = self.initial_balance
         self.max_drawdown = 0.0
@@ -74,6 +79,12 @@ class TradingEnv(gym.Env):
         self.current_step = 0
         self.max_steps = len(self.data)
         self.avg_trade_duration = 0.0
+
+        self.pnl_history = []
+
+        self.total_intermediate_given = 0.0
+        self.winning_trades = 0
+        self.losing_trades = 0
 
         # Observation space ( Market data + agent state)
         ### Agent state components:
@@ -142,6 +153,25 @@ class TradingEnv(gym.Env):
             dtype=np.float32
         )
 
+    def calculate_final_reward(self, final_pnl, duration_steps):
+        base_reward = (np.sign(final_pnl) * (final_pnl ** 2)) / 100.0
+
+        # Patience multiplier
+        time_mult = 1.0 + np.log1p(duration_steps)
+
+        #Sortino penalty
+        history = np.array(self.pnl_history)
+        downside = history[history < 0]
+        downside_penalty = np.mean(downside**2) if len(downside) > 0 else 0.0
+
+        # Final calculation
+        if final_pnl > 0:
+            reward = (base_reward * time_mult) - (0.03 * downside_penalty)
+        else:
+            reward = (base_reward) - (0.05 * downside_penalty)
+
+        return reward
+
 
     def _get_observation(self):
         # safe_step = min(self.current_step, len(self.data) - 1)
@@ -185,13 +215,15 @@ class TradingEnv(gym.Env):
 
         # --- Advance time
         self.current_step += 1
-
+        step_reward = 0.0
         if action == 1 and not self.active_trade:  # Buy Call
             self.active_trade = True
             self.active_trade_direction = 1
             self.active_trade_entry_price = price
             self.active_trade_duration = 0
             self.pnl -= self.trade_fee
+            self.pnl_history = [0.0]  # Start new trade PnL history
+            self.prev_active_pnl = 0.0
         
         elif action == 2 and not self.active_trade:  # Buy Put
             self.active_trade = True
@@ -199,12 +231,21 @@ class TradingEnv(gym.Env):
             self.active_trade_entry_price = price
             self.active_trade_duration = 0
             self.pnl -= self.trade_fee
+            self.pnl_history = [0.0]  # Start new trade PnL history
+            self.prev_active_pnl = 0.0
 
         elif action == 3 and self.active_trade:  # Sell (Close position)
             self.no_trades_completed += 1
-            trade_profit = (price - self.active_trade_entry_price) * self.active_trade_direction * self.price_multiplier
-            self.pnl += trade_profit - self.trade_fee
+            trade_profit = (price - self.active_trade_entry_price - self.trade_fee) * self.active_trade_direction * self.price_multiplier
+            self.pnl += trade_profit
             self.avg_trade_duration = ((self.avg_trade_duration * (self.no_trades_completed - 1)) + self.active_trade_duration) / self.no_trades_completed
+            if trade_profit > 0:
+                self.winning_trades += 1
+            else:
+                self.losing_trades += 1
+            final_reward = self.calculate_final_reward(trade_profit, self.active_trade_duration)
+            step_reward = final_reward - self.total_intermediate_given
+            self.total_intermediate_given = 0.0
             self.active_pnl = 0.0
             self.active_trade = False
             self.active_trade_direction = 0
@@ -212,19 +253,26 @@ class TradingEnv(gym.Env):
             self.active_trade_duration = 0
             
 
-
         ### Unrealized PnL calculation
         if self.active_trade:
             self.active_pnl = (price - self.active_trade_entry_price) * self.active_trade_direction * self.price_multiplier
             self.active_trade_duration += 1
+            delta_pnl = self.active_pnl - self.prev_active_pnl
+            self.prev_active_pnl = self.active_pnl
+            self.pnl_history.append(self.active_pnl)
+            step_reward = delta_pnl * 0.01
+
+            #Tiny time decay penalty
+            step_reward -= 0.001
+            self.total_intermediate_given += step_reward
+
         else:
             self.active_pnl = 0.0
 
         # ---- Reward Calculation ----
         total_pnl = self.pnl + self.active_pnl
-        current_reward = np.power(total_pnl, 3) / 1000
-        reward = current_reward - self.prev_total_pnl
-        self.prev_total_pnl = current_reward
+
+        # self.prev_total_pnl = current_reward
 
         # Update balance and calculate drawdown
         current_balance = self.balance + total_pnl
@@ -264,7 +312,9 @@ class TradingEnv(gym.Env):
             "max_drawdown_percent": self.max_drawdown * 100,
             "peak_balance": self.peak_balance,
             "current_drawdown_percent": current_drawdown * 100,
-            "episode_id": self.episode_id
+            "episode_id": self.episode_id,
+            "winning_trades": self.winning_trades,
+            "losing_trades": self.losing_trades
         }
 
         if terminated or truncated and not self.evaluation:
@@ -310,4 +360,4 @@ class TradingEnv(gym.Env):
 
         obs = self._get_observation()
 
-        return obs, reward, terminated, truncated, info
+        return obs, step_reward, terminated, truncated, info
