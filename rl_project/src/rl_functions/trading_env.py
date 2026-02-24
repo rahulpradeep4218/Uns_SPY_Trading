@@ -156,8 +156,13 @@ class TradingEnv(gym.Env):
     def calculate_final_reward(self, final_pnl, duration_steps):
         base_reward = (np.sign(final_pnl) * (final_pnl ** 2)) / 100.0
 
+        day_progress = self.current_step / self.max_steps if self.max_steps > 0 else 0.0
+
+        MAX_HOLD = 15.0
+
+        decay_weight = 1.0 - (day_progress ** 2)
         # Patience multiplier
-        time_mult = 1.0 + np.log1p(duration_steps)
+        time_mult = 1.0 + ( min(duration_steps, MAX_HOLD) * 0.07 * decay_weight )
 
         #Sortino penalty
         history = np.array(self.pnl_history)
@@ -168,7 +173,8 @@ class TradingEnv(gym.Env):
         if final_pnl > 0:
             reward = (base_reward * time_mult) - (0.03 * downside_penalty)
         else:
-            reward = (base_reward) - (0.05 * downside_penalty)
+            loss_penalty = 1.0 + day_progress
+            reward = (base_reward * loss_penalty) - (0.05 * downside_penalty)
 
         return reward
 

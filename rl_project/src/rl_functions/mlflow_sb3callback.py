@@ -99,6 +99,12 @@ class MLflowRLCallback(BaseCallback):
                         info['losing_trades'],
                         step=self.num_timesteps
                     )
+                    if info['losing_trades'] > 0:
+                        mlflow.log_metric(
+                            "win_loss_ratio",
+                            abs(info['winning_trades'] / info['losing_trades']),
+                            step=self.num_timesteps
+                        )
             
             if dones[0]:
                 self.pnl_list = [0.0]  # Reset PnL list for next episode
@@ -117,15 +123,16 @@ class MLflowRLCallback(BaseCallback):
             self._run_evaluation(vec_path=vec_path)
 
         ## Cycle value of ent coeff
-        cycle_steps = self.config['rl']['cyclic_entropy_update_freq']
-        cycle_pos = self.num_timesteps % cycle_steps
+        ### Commenting this logic to update ent_coeff and set a static value
+        # cycle_steps = self.config['rl']['cyclic_entropy_update_freq']
+        # cycle_pos = self.num_timesteps % cycle_steps
 
-        #Sawtooth logic to update ent coeff so only spike at 0.04
-        fraction = cycle_pos / cycle_steps
-        new_ent_coeff = 0.03 - (0.02 * fraction)  # Linearly decrease from 0.03 to 0.01
+        # #Sawtooth logic to update ent coeff so only spike at 0.04
+        # fraction = cycle_pos / cycle_steps
+        # new_ent_coeff = 0.03 - (0.02 * fraction)  # Linearly decrease from 0.03 to 0.01
 
-        #Update ent coeff in the model's policy
-        self.model.ent_coeff = max(new_ent_coeff, 0.01)  # Ensure it doesn't go below 0.01
+        # #Update ent coeff in the model's policy
+        # self.model.ent_coeff = max(new_ent_coeff, 0.01)  # Ensure it doesn't go below 0.01
         return True
     
     def _run_evaluation(self, vec_path):
@@ -212,6 +219,12 @@ class MLflowRLCallback(BaseCallback):
             info.get("losing_trades"),
             step=self.eval_num
         )
+        if info.get("losing_trades", 0) > 0:
+            mlflow.log_metric(
+                "eval_win_loss_ratio",
+                abs(info.get("winning_trades", 0) / info.get("losing_trades", 1)),
+                step=self.eval_num
+            )
         self.eval_num += 1
         # return {
         #     "eval_total_trades_number": info.get("no_trades_completed"),

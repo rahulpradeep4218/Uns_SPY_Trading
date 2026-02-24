@@ -76,6 +76,34 @@ def get_data_for_model_inference(session_record: TradeSession):
     return scalers, training_config, model_high, model_low , inf_config
 
 
+def get_data_for_model_inference_RL(session_record: TradeSession):
+    """
+    This function gets the necessary data for inference using the Reinforcement Learning model.
+    It uses the model alias stored in the session record to fetch the correct model and its associated artifacts.
+    :param session_record: Description
+    :type session_record: TradeSession
+    """
+    high_alias = session_record.model_high_alias
+    inf_config = get_inf_config()
+    scalers, training_config = download_artifacts(
+        config=inf_config,
+        alias=high_alias,
+    )
+    model_high_version = session_record.model_high_version
+    model_low_version = session_record.model_low_version
+
+    model_high = get_model_from_mlflow(
+        config=inf_config,
+        model_name=inf_config['mlflow']['high_model_name'],
+        model_version=model_high_version
+    )
+    model_low = get_model_from_mlflow(
+        config=inf_config,
+        model_name=inf_config['mlflow']['low_model_name'],
+        model_version=model_low_version
+    )
+    return scalers, training_config, model_high, model_low , inf_config
+
 def generate_tos_order(trade: TradeRecord):
     inf_config = get_inf_config()
     tos_cfg = inf_config['inference']['tos']
@@ -370,6 +398,131 @@ async def websocket_simulation(
 
     except WebSocketDisconnect:
         print(f"Client disconnected from session {session_id}")
+
+
+
+
+@router.websocket("/ws/simulation_rl/{session_id}")
+async def websocket_simulation_rl(
+    websocket: WebSocket, 
+    session_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    WebSocket endpoint for real-time simulation updates.
+    """
+    await websocket.accept()
+    speed = 1.0 # Default speed factor for simulation
+    try:
+        initial_data = await websocket.receive_json()
+        sim_options = SimulationOptions(**initial_data['options'])
+        logger.info(f"Received simulation options for RL: {sim_options.model_dump()}")
+        
+
+        speed = min(sim_options.speed, 100.0)  # Cap speed to a maximum of 100x
+        logger.info(f"Speed delay : {1.0 / speed}")
+        session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
+        if not session_record:
+            await websocket.close(code=1008, reason="Session not found")
+            return
+        high_alias = session_record.model_high_alias if session_record.model_high_alias else None
+        if not high_alias:
+            await websocket.close(code=1008, reason="Session high model alias that stores RL model alias is not found")
+            return
+        
+        scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
+
+        candles_query = db.query(PriceData).filter(
+            PriceData.symbol == session_record.symbol,
+            PriceData.time <= session_record.trade_end,
+            PriceData.time >= session_record.trade_start
+        ).order_by(PriceData.time.asc())
+        all_candles = candles_query.all()
+        #print("Total candles to process:", len(candles))
+        last_trade = db.query(TradeRecord).filter(
+            TradeRecord.session_id == session_id,
+        ).order_by(TradeRecord.trade_time.desc()).first()
+
+        if last_trade:
+            print(f"Resuming from last trade time : {last_trade.trade_time}")
+            candles_query = candles_query.filter(
+                PriceData.time > last_trade.trade_time
+            )
+        else:
+            print("No previous trades found, starting from the beginning of the session.")
+        
+        candles = candles_query.all()
+        print(f"Total candles to process: {len(candles)}")
+
+        for current_candle in candles:
+            # Simulate processing time based on speed factor
+            await asyncio.sleep(1.0 / speed)
+
+            result = await run_simulation_one_candle(
+                db, 
+                session_record, 
+                training_config, 
+                current_candle, 
+                sim_options, 
+                model_high, 
+                model_low, 
+                scalers,
+                inf_config=inf_config
+            )
+
+            # candles_till_now = db.query(PriceData).filter(
+            #     PriceData.symbol == session_record.symbol,
+            #     PriceData.time <= current_candle.time,
+            #     PriceData.time >= session_record.trade_start
+            # ).all()
+            trade_signals_till_now = db.query(TradeRecord).filter(
+                TradeRecord.session_id == session_id,
+                TradeRecord.trade_time <= current_candle.time,
+                TradeRecord.trade_time >= session_record.trade_start
+            ).all()
+            trade_signals_till_now_count = len(trade_signals_till_now)
+            progress = trade_signals_till_now_count / len(all_candles) * 100 if all_candles else 0
+            #candles_list = [can for can in candles_till_now]
+            #candle_table = jsonable_encoder(candles_list)
+            await websocket.send_json({
+                "type": "candle_data",
+                "data": [serialize_candle(current_candle)]
+            })
+
+            all_trades, trade_stats = get_trade_and_trade_stats(
+                db,
+                session_id,
+                progress
+            )
+
+            await websocket.send_json({
+                "type": "trade_stats",
+                "data": trade_stats.model_dump()
+            })
+
+            take_profits = get_trade_record_values(
+                db=db,
+                session_id=session_id,
+                trade_start=session_record.trade_start,
+                trade_end=current_candle.time
+            )
+
+            await websocket.send_json({
+                "type": "take_profits",
+                "data": jsonable_encoder(take_profits)
+            })
+
+            
+            trade_table = [trade for trade in all_trades]
+            trade_table = jsonable_encoder(trade_table)
+            await websocket.send_json({
+                "type": "trade_table",
+                "data": trade_table
+            })
+
+    except WebSocketDisconnect:
+        print(f"Client disconnected from session {session_id}")
+
 
 
 def get_first_record_time_realtime(db: Session, schwab_config, session_record: TradeSession) -> datetime:

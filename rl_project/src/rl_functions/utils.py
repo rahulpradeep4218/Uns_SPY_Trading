@@ -629,10 +629,11 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
             learning_rate=3e-4,
             n_steps=2048,
             batch_size=128,
-            gamma=0.98,
+            gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
             verbose=1,
+            ent_coef=0.02,
             policy_kwargs=policy_kwargs,
         )
 
