@@ -7,7 +7,7 @@ REM    C:\project> echo %OAUTH2_PROXY_SCOPE%
 REM ───────────────────────────────────────────────────────────────
 
 REM Iterate over every non-blank line of .env
-for /f "usebackq tokens=* delims=" %%L in (".env") do (
+for /f "usebackq tokens=* delims=" %%L in (".env_local") do (
     REM skip lines starting with #
     echo %%L | findstr /b "#" >nul
     if errorlevel 1 (

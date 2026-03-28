@@ -204,6 +204,33 @@ def get_closest_trading_date(db, symbol, target_date, only_next=False):
 # print(f"Annualized Sharpe: {metrics.calculate_sharpe():.4f}")
 # print(f"Annualized Sortino: {metrics.calculate_sortino():.4f}")
 
+
+def get_live_env(config: dict, db: Session, streamer, symbol='SPY', logger=None):
+    from rl_functions.trading_env import LiveTradingEnv
+    obs_features = get_observation_features(config)
+    initial_balance = float(config['rl']['initial_balance'])
+    trade_fee = float(config['rl']['trade_fee'])
+    max_trade_loss_percent = float(config['rl']['max_trade_loss_percent'])
+    price_multiplier = float(config['rl']['price_multiplier'])
+
+    def make_env():
+        return LiveTradingEnv(
+            db=db,
+            symbol=symbol,
+            obs_features=obs_features,
+            streamer=streamer,
+            initial_balance=initial_balance,
+            trade_fee=trade_fee,
+            max_trade_loss_percent=max_trade_loss_percent,
+            price_multiplier=price_multiplier,
+            logger=logger
+        )
+
+    return DummyVecEnv([make_env])
+
+
+
+#### This method is for getting a env for training and evaluation
 def get_env(config: dict, db: Session, eval_mode: bool=False, dagster_logger=None):
     """
     Creates and returns a DummyVecEnv wrapped TradingEnv instance based on the provided configuration and database session.
@@ -441,6 +468,27 @@ def get_data_for_model_inference(inf_config: dict):
     high_version = inf_config['rl']['model_high_version']
     low_version = inf_config['rl']['model_low_version']
     high_alias = inf_config['rl']['model_high_alias']
+
+    inf_config = get_inf_config()
+    scalers, training_config = download_artifacts(
+        config=inf_config,
+        alias=high_alias,
+    )
+
+    model_high = get_model_from_mlflow(
+        config=inf_config,
+        model_name=inf_config['mlflow']['high_model_name'],
+        model_version=high_version
+    )
+    model_low = get_model_from_mlflow(
+        config=inf_config,
+        model_name=inf_config['mlflow']['low_model_name'],
+        model_version=low_version
+    )
+    return scalers, training_config, model_high, model_low
+
+def get_data_for_model_inference_parameter_values(high_version: int, low_version: int, high_alias: str):
+
 
     inf_config = get_inf_config()
     scalers, training_config = download_artifacts(

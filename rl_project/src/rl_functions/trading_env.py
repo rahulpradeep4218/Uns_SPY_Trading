@@ -367,3 +367,220 @@ class TradingEnv(gym.Env):
         obs = self._get_observation()
 
         return obs, step_reward, terminated, truncated, info
+
+
+
+class LiveTradingEnv(TradingEnv):
+    """
+    Live/Streamed Trading Environment.
+    Instead of loading a full day of data, this environment updates its state
+    one row at a time from the RL_Stream_Data generator.
+    """
+    def __init__(self, db, symbol, obs_features, streamer, **kwargs):
+        # We pass dummy dates because the streamer controls the timeline
+        super().__init__(
+            db=db, 
+            symbol=symbol, 
+            start_date=None, 
+            end_date=None, 
+            obs_features=obs_features, 
+            evaluation=True, 
+            **kwargs
+        )
+        self.streamer = streamer
+        self.stream_gen = None
+        self.current_row = None
+        self.last_timestamp = None
+        
+        if self.logger:
+            self.logger.info("LiveTradingEnv initialized and ready for streaming.")
+
+    def reset(self, *, seed=None, options=None):
+        """
+        Resets the environment state and restarts the data stream.
+        """
+        # Call Gymnasium's base reset for seeding
+        super(gym.Env, self).reset(seed=seed)
+        
+        # Reset internal trading metrics
+        self.pnl = 0.0
+        self.active_pnl = 0.0
+        self.prev_active_pnl = 0.0
+        self.balance = self.initial_balance
+        self.peak_balance = self.initial_balance
+        self.max_drawdown = 0.0
+        self.max_episode_loss = self.balance * self.max_trade_loss_percent / 100
+        
+        self.current_step = 0
+        self.no_trades_completed = 0
+        self.active_trade = False
+        self.active_trade_direction = 0 # 1 for Call, -1 for Put
+        self.active_trade_entry_price = 0.0
+        self.active_trade_duration = 0
+        self.total_intermediate_given = 0.0
+        self.winning_trades = 0
+        self.losing_trades = 0
+        self.pnl_history = []
+        self.pnl_list = [0.0]
+        self.xg_high = 0.0
+        self.xg_low = 0.0
+
+        # Initialize the Streamer Generator
+        self.stream_gen = self.streamer.stream()
+        
+        # Pull the first row to initialize the observation space
+        try:
+            self.current_row = next(self.stream_gen)
+            self.last_timestamp = self.current_row['Date']
+        except StopIteration:
+            raise RuntimeError("Streamer yielded no data during reset.")
+
+        # Define Observation Space based on features + 4 agent state vars
+        # Agent state: [is_active, direction, time_norm (placeholder), loss_ratio]
+        agent_state_dim = 4
+        obs_dim = len(self.obs_features) + agent_state_dim
+        self.observation_space = spaces.Box(
+            low=-10.0, high=10.0, shape=(obs_dim,), dtype=np.float32
+        )
+
+        info = {"timestamp": self.last_timestamp}
+        return self._get_observation(), info
+
+    def _get_observation(self):
+        """
+        Constructs the observation vector using the current row from the streamer
+        and the real-time agent state.
+        """
+        # 1. Extract Market Features from the streamed row
+        market_obs = np.array(
+            [self.current_row[f] for f in self.obs_features], 
+            dtype=np.float32
+        )
+
+        # 2. Calculate Agent State
+        total_pnl = self.pnl + self.active_pnl
+        
+        # Normalize the loss ratio relative to the stop-out limit
+        loss_ratio = total_pnl / self.max_episode_loss if self.max_episode_loss != 0 else 0.0
+        loss_ratio = np.clip(loss_ratio, -1.0, 1.0)
+        
+        # In live mode, 'progress' is less certain; we use a dummy or a session-time based norm
+        progress = 0.0 
+        
+        agent_obs = [
+            float(self.active_trade),
+            float(self.active_trade_direction),
+            progress,
+            loss_ratio
+        ]
+
+        # 3. Concatenate
+        obs = np.concatenate([market_obs, np.array(agent_obs, dtype=np.float32)])
+        
+        # Sanity Check
+        if np.isnan(obs).any() and self.logger:
+            self.logger.warning(f"NaN in Live Observation at {self.last_timestamp}")
+            
+        return obs
+
+    def step(self, action):
+        """
+        Executes one action based on the current streamed row, 
+        then pulls the NEXT row from the stream.
+        """
+        truncated = False
+        step_reward = 0.0
+        
+        # Current price from the row we are CURRENTLY on
+        price = self.current_row['Close']
+        self.last_timestamp = self.current_row['Date']
+
+        # --- 1. Execute Actions ---
+        if action == 1 and not self.active_trade:  # Buy Call
+            self.active_trade = True
+            self.active_trade_direction = 1
+            self.active_trade_entry_price = price
+            self.active_trade_duration = 0
+            self.pnl -= self.trade_fee
+            self.pnl_history = [0.0]
+            self.prev_active_pnl = 0.0
+        
+        elif action == 2 and not self.active_trade:  # Buy Put
+            self.active_trade = True
+            self.active_trade_direction = -1
+            self.active_trade_entry_price = price
+            self.active_trade_duration = 0
+            self.pnl -= self.trade_fee
+            self.pnl_history = [0.0]
+            self.prev_active_pnl = 0.0
+
+        elif action == 3 and self.active_trade:  # Close Position
+            self.no_trades_completed += 1
+            trade_profit = (price - self.active_trade_entry_price) * self.active_trade_direction * self.price_multiplier
+            trade_profit -= self.trade_fee # Apply fee on exit as well
+            
+            self.pnl += trade_profit
+            
+            # Statistics
+            if trade_profit > 0: self.winning_trades += 1
+            else: self.losing_trades += 1
+            
+            # Reward Calculation
+            final_reward = self.calculate_final_reward(trade_profit, self.active_trade_duration)
+            step_reward = final_reward - self.total_intermediate_given
+            
+            # Reset Trade State
+            self.total_intermediate_given = 0.0
+            self.active_pnl = 0.0
+            self.active_trade = False
+            self.active_trade_direction = 0
+            self.active_trade_entry_price = 0.0
+            self.active_trade_duration = 0
+
+        # --- 2. Update Unrealized PnL (If holding) ---
+        if self.active_trade:
+            self.active_pnl = (price - self.active_trade_entry_price) * self.active_trade_direction * self.price_multiplier
+            self.active_trade_duration += 1
+            
+            # Shaping reward: change in unrealized PnL
+            delta_pnl = self.active_pnl - self.prev_active_pnl
+            self.prev_active_pnl = self.active_pnl
+            self.pnl_history.append(self.active_pnl)
+            
+            step_reward = (delta_pnl * 0.01) - 0.001 # 0.001 is the time decay penalty
+            self.total_intermediate_given += step_reward
+
+        # --- 3. Update Global Metrics ---
+        total_pnl = self.pnl + self.active_pnl
+        current_balance = self.initial_balance + total_pnl
+        
+        if current_balance > self.peak_balance:
+            self.peak_balance = current_balance
+        
+        drawdown = (self.peak_balance - current_balance) / self.peak_balance if self.peak_balance > 0 else 0.0
+        if drawdown > self.max_drawdown:
+            self.max_drawdown = drawdown
+
+        # --- 4. Get Next Row from Streamer ---
+        try:
+            self.current_row = next(self.stream_gen)
+            self.pred_high = self.current_row['pred_high']
+            self.pred_low = self.current_row['pred_low']
+            self.current_step += 1
+        except StopIteration:
+            # Stream ended (end of simulation or market close)
+            truncated = True
+        
+
+        info = {
+            "total_pnl": total_pnl,
+            "realized_pnl": self.pnl,
+            "active_trade": self.active_trade,
+            "balance": current_balance,
+            "max_drawdown_pct": self.max_drawdown * 100,
+            "timestamp": self.last_timestamp,
+            "winning_trades": self.winning_trades,
+            "losing_trades": self.losing_trades
+        }
+
+        return self._get_observation(), step_reward, False, truncated, info
