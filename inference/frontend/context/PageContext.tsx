@@ -15,6 +15,8 @@ type PageContextType = {
     setModelHighAlias: (value: string) => void;
     model_low_alias: string;
     setModelLowAlias: (value: string) => void;
+    model_rl_alias: string;
+    setModelRLAlias: (value: string) => void;
     model_high_version: number | string;
     setModelHighVersion: (value: number | string) => void;
     model_low_version: number | string;
@@ -74,6 +76,7 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
     const [sidebar_fields, setSidebarFields] = useState<ReactNode>(null);
     const [model_high_alias, setModelHighAlias] = useState<string>('');
     const [model_low_alias, setModelLowAlias] = useState<string>('');
+    const [model_rl_alias, setModelRLAlias] = useState<string>('');
     const [model_high_version, setModelHighVersion] = useState<number | string>('');
     const [model_low_version, setModelLowVersion] = useState<number | string>('');
     const [training_start, setTrainingStart] = useState<string | null>(null);
@@ -126,6 +129,8 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
             setModelHighAlias, 
             model_low_alias, 
             setModelLowAlias,
+            model_rl_alias,
+            setModelRLAlias,
             model_high_version,
             setModelHighVersion,
             model_low_version,

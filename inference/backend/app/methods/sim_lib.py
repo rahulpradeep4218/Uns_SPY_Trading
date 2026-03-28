@@ -1,5 +1,7 @@
+import stat
 from sqlalchemy.exc import IntegrityError
 from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 from typing import Dict, Any
 from datetime import timedelta
 from sqlalchemy import desc
@@ -155,6 +157,80 @@ def calculate_atr(db: Session, symbol: str, atr_period: int, current_candle: Pri
     atr = sum(trs[-atr_period:]) / atr_period if len(trs) >= atr_period else None
     return atr
 
+
+async def create_trade_for_rl(
+    db: Session,
+    session: TradeSession,
+    current_candle: PriceData,
+    signal: int,
+    isRealtime: bool = False,
+    inf_config: Dict[str, Any] = {}
+    ):
+    current_close = current_candle.close
+    end_of_day_cutoff_hour = inf_config.get("inference").get("end_of_day_cutoff_hour", 15)
+    end_of_day_cutoff_minute = inf_config.get("inference").get("end_of_day_cutoff_minute", 40)
+
+    if current_candle.time.hour >= end_of_day_cutoff_hour and current_candle.time.minute >= end_of_day_cutoff_minute:
+        cutoff_passed = True
+    else:
+        cutoff_passed = False
+
+    def open_trade_or_not():
+        
+        if signal == 1 or signal == 2:
+            existing_trade = db.query(TradeRecord).filter(
+                TradeRecord.session_id == session.id,
+                TradeRecord.status == "OPEN"
+            ).first()
+            if existing_trade:
+                return False
+            if cutoff_passed:
+                return False
+            return True
+        return False
+    
+    open_trade = open_trade_or_not()
+
+    if open_trade:
+        status = "OPEN"
+        entry_price = current_close
+    else:
+        status = "SIGNAL"
+        entry_price = None
+
+    new_trade_record = TradeRecord(
+        session_id=session.id,
+        symbol=session.symbol,
+        trade_time=current_candle.time,
+        high_val=current_candle.high,
+        low_val=current_candle.low,
+        signal=signal,
+        status=status,
+        entry_price=entry_price,
+        buy_stop_loss=0.0,
+        buy_take_profit=0.0,
+        sell_stop_loss=0.0,
+        sell_take_profit=0.0,
+        profit=0.0,
+        calc_stop_loss=0.0,
+        calc_take_profit=0.0,
+        exit_reason=None  # This will be updated later if the trade is closed
+    )
+    try:
+        db.add(new_trade_record)
+        db.commit()
+        db.refresh(new_trade_record)
+    except IntegrityError as e:
+        db.rollback()
+        print("Duplicate trade record detected, updating existing record.")
+        db.merge(new_trade_record)
+        db.commit()
+        print(f"Updated existing record for session {session.id} and symbol {session.symbol} at time {current_candle.time}")
+
+    return new_trade_record
+
+
+
 async def create_trade_for_candle(
     db: Session,
     session: TradeSession,
@@ -265,6 +341,55 @@ async def create_trade_for_candle(
 
     return new_trade_record
 
+async def calculate_daily_loss_rl(
+        sim_options: SimulationOptions,
+        session_id: int,
+        db: Session
+):
+    trades_closed = db.query(TradeRecord).filter(
+        TradeRecord.session_id == session_id,
+        TradeRecord.status == "CLOSED",
+    ).all()
+    total_profit = 0.0
+    for trade in trades_closed:
+        total_profit += trade.profit
+    total_balance = sim_options.starting_balance + total_profit
+    daily_loss_limit = sim_options.max_day_loss_percent * sim_options.starting_balance / 100
+    return daily_loss_limit
+
+async def check_trade_exit_rl(
+    trade: TradeRecord,
+    current_candle: PriceData,
+    sim_options: SimulationOptions,
+    current_signal: int = 0,
+    daily_loss_limit: float = None
+):
+    current_close = current_candle.close
+    trade.profit = current_close - trade.entry_price if trade.signal == 1 else trade.entry_price - current_close  
+    #### Check different conditions of closing the trade
+    close_trade = False
+    if trade.profit < -daily_loss_limit:
+        close_trade = True
+        status_update = "DAILY_LOSS_LIMIT"
+    elif current_candle.time.hour >= 15 and current_candle.time.minute >= 40 and sim_options.close_at_eod:
+        close_trade = True
+        status_update = "END_OF_DAY"
+    elif current_signal == 3:
+        close_trade = True
+        if trade.profit >= 0:
+            status_update = "MANUAL_CLOSE_PROFIT"
+        else:
+            status_update = "MANUAL_CLOSE_LOSS"
+
+    if close_trade:
+        trade.status = "CLOSED"
+        trade.exit_price = current_close
+        trade.exit_reason = status_update
+
+    return trade.status
+
+    
+
 async def check_trade_exit(
     trade: TradeRecord,
     current_candle: PriceData,
@@ -347,6 +472,50 @@ async def check_trade_exit(
         else:
             trade.profit = trade.entry_price - current_close
     return trade.status
+    
+
+async def run_simulation_one_rl_step(
+        db: Session,
+        session: TradeSession,
+        config,
+        sim_options: SimulationOptions,
+        current_candle: PriceData,
+        action: int,
+        daily_loss_limit: float = None
+):
+
+    ############# Update existing trade record #####################
+    open_trades = db.query(TradeRecord).filter(
+        TradeRecord.session_id == session.id,
+        TradeRecord.status == "OPEN"
+    ).all()
+
+    for trade in open_trades:
+        await check_trade_exit_rl(
+            trade=trade,
+            current_candle=current_candle,
+            sim_options=sim_options,
+            current_signal=action,
+            daily_loss_limit=daily_loss_limit
+        )
+    db.commit()  # Commit the changes to the database
+    #db.refresh(TradeRecord)  # Refresh the session to get the latest data
+    
+
+    new_trade_record = await create_trade_for_rl(
+        db=db,
+        session=session,
+        current_candle=current_candle,
+        signal=action,
+        isRealtime=False,
+        inf_config=config
+    )
+
+    return {
+        "status": "OK",
+        "message": "Trade record updated or created successfully.",
+    }
+
     
 
 async def run_simulation_one_candle(

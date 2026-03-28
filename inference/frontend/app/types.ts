@@ -52,6 +52,8 @@ export interface SimulationOptions {
     allow_multiple_open_trades?: boolean;
     close_using_signal?: boolean;
     speed?: number;
+    starting_balance?: number;
+    max_day_loss_percent?: number;
 }
 
 export interface SimulationOptionsFormProps {

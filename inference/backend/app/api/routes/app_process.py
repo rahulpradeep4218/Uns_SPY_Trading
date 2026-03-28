@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, HTTPException
 from fastapi.encoders import jsonable_encoder
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from rl_functions.utils import get_live_env
 from sqlalchemy.orm import Session
 import asyncio
 from typing import List, Dict, Optional
@@ -14,10 +16,22 @@ from trading_functions.db.models import TradeSession, PriceData, TradeRecord, Re
 import yaml
 from trading_functions.inference.inf_functions import (
     download_artifacts,
-    get_model_from_mlflow
+    download_rl_artifacts,
+    get_model_from_mlflow,
+    get_rl_model_tags
 )
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import VecNormalize
+from trading_functions.inference.RL_Streamer import RL_Stream_Data
+
 import os
-from app.methods.sim_lib import run_simulation_one_candle, run_realtime_one_candle, check_trade_exit
+from app.methods.sim_lib import (
+    run_simulation_one_candle, 
+    run_realtime_one_candle, 
+    check_trade_exit,
+    calculate_daily_loss_rl,
+    run_simulation_one_rl_step
+)
 import time
 import logging
 import math
@@ -76,33 +90,72 @@ def get_data_for_model_inference(session_record: TradeSession):
     return scalers, training_config, model_high, model_low , inf_config
 
 
-def get_data_for_model_inference_RL(session_record: TradeSession):
+def get_artifacts_for_model_inference_RL(session_record: TradeSession, db: Session, simulation: bool=True):
     """
     This function gets the necessary data for inference using the Reinforcement Learning model.
     It uses the model alias stored in the session record to fetch the correct model and its associated artifacts.
     :param session_record: Description
     :type session_record: TradeSession
-    """
-    high_alias = session_record.model_high_alias
-    inf_config = get_inf_config()
-    scalers, training_config = download_artifacts(
-        config=inf_config,
-        alias=high_alias,
-    )
-    model_high_version = session_record.model_high_version
-    model_low_version = session_record.model_low_version
+    :param db: Database session
 
-    model_high = get_model_from_mlflow(
+    Returns a tuple containing the RL model, the VecNormalize object, the inference configuration, and the RL data streamer.
+    """
+    rl_alias = session_record.model_high_alias
+    inf_config = get_inf_config()
+    
+    #### We save the rl model version in the model_high_version field of session_record in session table
+    rl_version = session_record.model_high_version
+    symbol = session_record.symbol
+    rl_model_name = inf_config['rl_inference']['rl_model_name']
+
+    model_local_path, vec_norm_local_path = download_rl_artifacts(
         config=inf_config,
-        model_name=inf_config['mlflow']['high_model_name'],
-        model_version=model_high_version
+        model_name=rl_model_name,
+        model_version=rl_version
     )
-    model_low = get_model_from_mlflow(
-        config=inf_config,
-        model_name=inf_config['mlflow']['low_model_name'],
-        model_version=model_low_version
+    model_tags = get_rl_model_tags(
+                config=inf_config, 
+                model_name=rl_model_name, 
+                model_version=rl_version
     )
-    return scalers, training_config, model_high, model_low , inf_config
+    xg_model_high_version = model_tags.get('model_high_version')
+    xg_model_low_version = model_tags.get('model_low_version')
+    if xg_model_high_version is None or xg_model_low_version is None:
+        raise ValueError("RL model tags missing required keys: 'model_high_version' or 'model_low_version'")
+
+    xg_model_high_alias = inf_config['rl']['model_high_alias']
+
+    ### Calculation of start time and end time
+    if simulation:
+        start_time = session_record.trade_start.date() 
+        end_time = session_record.trade_end.date()
+    stream_data = RL_Stream_Data(
+        db=db,
+        symbol=symbol,
+        inf_config=inf_config,
+        model_high_version=xg_model_high_version,
+        model_low_version=xg_model_low_version,
+        model_high_alias=xg_model_high_alias,
+        simulation_mode=simulation, # Use True to stream from DB until real-time
+        start_time=start_time, 
+        end_time=end_time,
+        logger=logger
+    )
+    vec_env = get_live_env(
+                    config=inf_config, 
+                    db=db, 
+                    streamer=stream_data, 
+                    symbol=symbol, 
+                    logger=logger
+                )
+    model = PPO.load(model_local_path, env=vec_env)
+    vec_env = VecNormalize.load(vec_norm_local_path, env=vec_env)
+    vec_env.training = False
+    vec_env.norm_obs = True
+
+    model.set_env(vec_env)
+    
+    return model, vec_env, inf_config, stream_data
 
 def generate_tos_order(trade: TradeRecord):
     inf_config = get_inf_config()
@@ -278,6 +331,166 @@ async def remove_all_trades(session_id: int, db: Session = Depends(get_db)):
     return {"message": "All trades removed successfully."}
 
 
+@router.websocket("/ws/simulation_rl/{session_id}")
+async def websocket_simulation_rl(
+    websocket: WebSocket, 
+    session_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    WebSocket endpoint for real-time simulation updates using RL.
+    """
+    await websocket.accept()
+    speed = 1.0 # Default speed factor for simulation
+    try:
+        initial_data = await websocket.receive_json()
+        sim_options = SimulationOptions(**initial_data['options'])
+        logger.info(f"Received simulation options: {sim_options.model_dump()}")
+        
+
+        speed = min(sim_options.speed, 100.0)  # Cap speed to a maximum of 100x
+        logger.info(f"Speed delay : {1.0 / speed}")
+        session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
+        if not session_record:
+            await websocket.close(code=1008, reason="Session not found")
+            return
+        high_alias = session_record.model_high_alias if session_record.model_high_alias else None
+        if not high_alias:
+            await websocket.close(code=1008, reason="Session high model alias not found")
+            return
+        
+        #scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
+        rl_model, vec_env, inf_config, stream_data = await run_in_threadpool(get_artifacts_for_model_inference_RL, session_record=session_record, db=db, simulation=True)
+        
+        #### Reset the RL environment
+        obs = vec_env.reset()
+        raw_env = vec_env.envs[0]
+
+        candles_query = db.query(PriceData).filter(
+            PriceData.symbol == session_record.symbol,
+            PriceData.time <= session_record.trade_end,
+            PriceData.time >= session_record.trade_start
+        ).order_by(PriceData.time.asc())
+        all_candles = candles_query.all()
+
+
+        #print("Total candles to process:", len(candles))
+
+        #### Calculate the daily loss based on the starting balance from simulation options and the profit
+        daily_loss = calculate_daily_loss_rl(
+            db=db,
+            session_id=session_id,
+            sim_options=sim_options,
+        )
+
+        last_trade = db.query(TradeRecord).filter(
+            TradeRecord.session_id == session_id,
+        ).order_by(TradeRecord.trade_time.desc()).first()
+
+        if last_trade:
+            print(f"Resuming from last trade time : {last_trade.trade_time}")
+            start_time = last_trade.trade_time
+        else:
+            print("No previous trades found, starting from the beginning of the session.")
+            start_time = session_record.trade_start
+
+
+        #### Simulating the RL environment step by step till the start time is reached or passed
+        is_live_mode = False
+        current_day = None
+        while True:
+            action, _ = rl_model.predict(obs, deterministic=True)
+            current_ts = raw_env.last_timestamp
+
+            if not current_day:
+                current_day = current_ts.date()
+            
+            if current_ts.date() != current_day:
+                logger.info(f"New day reached in simulation: {current_ts.date()}. Current timestamp: {current_ts}")
+                current_day = current_ts.date()
+                daily_loss = calculate_daily_loss_rl(
+                    db=db,
+                    session_id=session_id,
+                    sim_options=sim_options,
+                )
+
+            # Switch to live mode only if the timestamp has reached or passed the simulation start or resume time
+            if not is_live_mode and current_ts >= start_time:
+                if not raw_env.active_trade:
+                    logger.info(f"Switching to live mode as current timestamp has reached or passed the session start time and there is no active trade. Current timestamp: {current_ts}, Session start time: {start_time}")
+                    is_live_mode = True
+                else:
+                    logger.info(f"Not switching to live mode even though current timestamp has reached or passed the session start time because there is an active trade. Current timestamp: {current_ts}, Session start time: {start_time}, Active trade entry price: {raw_env.active_trade.entry_price}, Active trade signal: {raw_env.active_trade.signal}")
+
+            if is_live_mode:
+                current_candle = db.query(PriceData).filter(
+                    PriceData.symbol == session_record.symbol,
+                    PriceData.time == current_ts
+                ).first()
+                status = run_simulation_one_rl_step(
+                    db=db,
+                    session=session_record,
+                    config=inf_config,
+                    current_candle=current_candle,
+                    sim_options=sim_options,
+                    action=action,
+                    daily_loss_limit=daily_loss
+                )
+                trade_signals_till_now = db.query(TradeRecord).filter(
+                    TradeRecord.session_id == session_id,
+                    TradeRecord.trade_time <= current_candle.time,
+                    TradeRecord.trade_time >= session_record.trade_start
+                ).all()
+                trade_signals_till_now_count = len(trade_signals_till_now)
+                progress = trade_signals_till_now_count / len(all_candles) * 100 if all_candles else 0
+                await websocket.send_json({
+                    "type": "candle_data",
+                    "data": [serialize_candle(current_candle)]
+                })
+
+                all_trades, trade_stats = get_trade_and_trade_stats(
+                    db,
+                    session_id,
+                    progress
+                )
+
+                await websocket.send_json({
+                    "type": "trade_stats",
+                    "data": trade_stats.model_dump()
+                })
+
+                take_profits = get_trade_record_values(
+                    db=db,
+                    session_id=session_id,
+                    trade_start=session_record.trade_start,
+                    trade_end=current_candle.time
+                )
+
+                await websocket.send_json({
+                    "type": "take_profits",
+                    "data": jsonable_encoder(take_profits)
+                })
+
+                
+                trade_table = [trade for trade in all_trades]
+                trade_table = jsonable_encoder(trade_table)
+                await websocket.send_json({
+                    "type": "trade_table",
+                    "data": trade_table
+                })
+            
+            
+            obs, rewards, dones, infos = vec_env.step(action)
+            
+            if dones[0]:
+                logger.info("Simulation completed")
+                break
+
+    except WebSocketDisconnect:
+        print(f"Client disconnected from session {session_id}")
+
+
+
 @router.websocket("/ws/simulation/{session_id}")
 async def websocket_simulation(
     websocket: WebSocket, 
@@ -304,130 +517,6 @@ async def websocket_simulation(
         high_alias = session_record.model_high_alias if session_record.model_high_alias else None
         if not high_alias:
             await websocket.close(code=1008, reason="Session high model alias not found")
-            return
-        
-        scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)
-
-        candles_query = db.query(PriceData).filter(
-            PriceData.symbol == session_record.symbol,
-            PriceData.time <= session_record.trade_end,
-            PriceData.time >= session_record.trade_start
-        ).order_by(PriceData.time.asc())
-        all_candles = candles_query.all()
-        #print("Total candles to process:", len(candles))
-        last_trade = db.query(TradeRecord).filter(
-            TradeRecord.session_id == session_id,
-        ).order_by(TradeRecord.trade_time.desc()).first()
-
-        if last_trade:
-            print(f"Resuming from last trade time : {last_trade.trade_time}")
-            candles_query = candles_query.filter(
-                PriceData.time > last_trade.trade_time
-            )
-        else:
-            print("No previous trades found, starting from the beginning of the session.")
-        
-        candles = candles_query.all()
-        print(f"Total candles to process: {len(candles)}")
-
-        for current_candle in candles:
-            # Simulate processing time based on speed factor
-            await asyncio.sleep(1.0 / speed)
-
-            result = await run_simulation_one_candle(
-                db, 
-                session_record, 
-                training_config, 
-                current_candle, 
-                sim_options, 
-                model_high, 
-                model_low, 
-                scalers,
-                inf_config=inf_config
-            )
-
-            # candles_till_now = db.query(PriceData).filter(
-            #     PriceData.symbol == session_record.symbol,
-            #     PriceData.time <= current_candle.time,
-            #     PriceData.time >= session_record.trade_start
-            # ).all()
-            trade_signals_till_now = db.query(TradeRecord).filter(
-                TradeRecord.session_id == session_id,
-                TradeRecord.trade_time <= current_candle.time,
-                TradeRecord.trade_time >= session_record.trade_start
-            ).all()
-            trade_signals_till_now_count = len(trade_signals_till_now)
-            progress = trade_signals_till_now_count / len(all_candles) * 100 if all_candles else 0
-            #candles_list = [can for can in candles_till_now]
-            #candle_table = jsonable_encoder(candles_list)
-            await websocket.send_json({
-                "type": "candle_data",
-                "data": [serialize_candle(current_candle)]
-            })
-
-            all_trades, trade_stats = get_trade_and_trade_stats(
-                db,
-                session_id,
-                progress
-            )
-
-            await websocket.send_json({
-                "type": "trade_stats",
-                "data": trade_stats.model_dump()
-            })
-
-            take_profits = get_trade_record_values(
-                db=db,
-                session_id=session_id,
-                trade_start=session_record.trade_start,
-                trade_end=current_candle.time
-            )
-
-            await websocket.send_json({
-                "type": "take_profits",
-                "data": jsonable_encoder(take_profits)
-            })
-
-            
-            trade_table = [trade for trade in all_trades]
-            trade_table = jsonable_encoder(trade_table)
-            await websocket.send_json({
-                "type": "trade_table",
-                "data": trade_table
-            })
-
-    except WebSocketDisconnect:
-        print(f"Client disconnected from session {session_id}")
-
-
-
-
-@router.websocket("/ws/simulation_rl/{session_id}")
-async def websocket_simulation_rl(
-    websocket: WebSocket, 
-    session_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    WebSocket endpoint for real-time simulation updates.
-    """
-    await websocket.accept()
-    speed = 1.0 # Default speed factor for simulation
-    try:
-        initial_data = await websocket.receive_json()
-        sim_options = SimulationOptions(**initial_data['options'])
-        logger.info(f"Received simulation options for RL: {sim_options.model_dump()}")
-        
-
-        speed = min(sim_options.speed, 100.0)  # Cap speed to a maximum of 100x
-        logger.info(f"Speed delay : {1.0 / speed}")
-        session_record = db.query(TradeSession).filter(TradeSession.id == session_id).first()
-        if not session_record:
-            await websocket.close(code=1008, reason="Session not found")
-            return
-        high_alias = session_record.model_high_alias if session_record.model_high_alias else None
-        if not high_alias:
-            await websocket.close(code=1008, reason="Session high model alias that stores RL model alias is not found")
             return
         
         scalers, training_config, model_high, model_low, inf_config = get_data_for_model_inference(session_record)

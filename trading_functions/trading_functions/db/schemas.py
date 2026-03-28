@@ -100,6 +100,8 @@ class SimulationOptions(BaseModel):
     start_time: Optional[datetime] = None  # Start time for simulation
     end_time: Optional[datetime] = None  # End time for simulation
     speed: float = 1.0  # Speed of simulation, 1.0 is real-time, 2.0 is double speed, etc.
+    starting_balance: float = 5000.0  # Starting balance for the simulation
+    max_day_loss_percent: float = 3.0
 
 
 class TradeStats(BaseModel):

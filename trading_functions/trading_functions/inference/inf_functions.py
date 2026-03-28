@@ -75,6 +75,48 @@ def get_model_from_mlflow(config, model_name="", model_version=None):
     return model
 
 
+def download_rl_artifacts(config, model_name, model_version):
+    mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
+    ml_client = MlflowClient()
+    mv = ml_client.get_model_version(name=model_name, version=model_version)
+    run_id = mv.run_id
+    artifact_download_path = config['mlflow']['artifact_download_path_rl']
+    checkpoint = mv.tags.get('checkpoint', None)
+    if not checkpoint:
+        raise ValueError(f"Checkpoint tag not found for model {model_name} version {model_version}")
+    checkpoint_artifact_path = f"checkpoint_{checkpoint}/artifacts"
+
+    # If local download directory already exist, delete it
+    if os.path.exists(artifact_download_path):
+        logger.info(f"Deleting existing artifact directory: {artifact_download_path}")
+        shutil.rmtree(artifact_download_path)
+    os.makedirs(artifact_download_path, exist_ok=True)
+
+    logger.info(f"Downloading RL artifacts to {artifact_download_path}")
+    model_artifact_path = f"{checkpoint_artifact_path}/model.zip"
+    vec_norm_artifact_path = f"{checkpoint_artifact_path}/vec_normalize.pkl"
+    
+    os.makedirs(artifact_download_path, exist_ok=True)
+    model_local_path = ml_client.download_artifacts(
+        run_id=run_id,
+        path=model_artifact_path,
+        dst_path=artifact_download_path
+    )
+    vec_norm_local_path = ml_client.download_artifacts(
+        run_id=run_id,
+        path=vec_norm_artifact_path,
+        dst_path=artifact_download_path
+    )
+
+    return model_local_path, vec_norm_local_path
+
+def get_rl_model_tags(config, model_name, model_version):
+    mlflow.set_tracking_uri(config['mlflow']['tracking_uri'])
+    ml_client = MlflowClient()
+    mv = ml_client.get_model_version(name=model_name, version=model_version)
+    tags = mv.tags if mv.tags else {}
+    return tags
+ 
 
 def download_artifacts(config, alias="dev", mlflow_uri=None):
 
@@ -157,7 +199,7 @@ def transform_for_inference(data, config, scalers):
     5. Scale features using Min-Max, Standard, and Robust scalers
     """
     logger.debug("Starting data transformation for inference.")
-    logger.info(f"Initial data shape: {data.shape}")
+    logger.debug(f"Initial data shape: {data.shape}")
     # Make datetime column a pd.datetime object
     data['Date'] = pd.to_datetime(data['Date'])
     logger.debug("Converted 'Date' column to datetime.")
@@ -165,18 +207,18 @@ def transform_for_inference(data, config, scalers):
     # Normalize time gaps
     data = normalize_timegaps_inference(data, config)
     logger.debug("Normalized time gaps in the data.")
-    logger.info(f"Data shape after time gap normalization: {data.shape}")
+    logger.debug(f"Data shape after time gap normalization: {data.shape}")
     # Add indicators if needed
     data, selected_indicators = add_all_indicators(data, config)
     logger.debug(f"Added indicators to the data : {selected_indicators}")
-    logger.info(f"Data shape after adding indicators: {data.shape}")
+    logger.debug(f"Data shape after adding indicators: {data.shape}")
     #print(f"Shape after adding indicators: {data.shape}")
     #print("Columns after adding indicators:", data.columns.tolist())
     # Close difference transformation
     data, close_diff_features = close_diff_transform(data, config)
     logger.debug(f"Applied close difference transformation on features: {close_diff_features}")
 
-    logger.info(f"Data shape before scaling: {data.shape}")
+    logger.debug(f"Data shape before scaling: {data.shape}")
 
     # Scale features
     data = scale_for_inference(data, config, scalers)
@@ -370,6 +412,37 @@ def mlflow_aliases(config):
         result[model] = alias_info_map
     return result
 
+def mlflow_aliases_rl(config):
+    model_name = config['rl']['model_high_alias']
+    mlflow_tracking = config['mlflow']['tracking_uri']
+    logger.info(f"Fetching RL MLflow aliases for models: {model_name} from tracking URI: {mlflow_tracking}")
+    if mlflow_tracking:
+        mlflow.set_tracking_uri(mlflow_tracking)
+    client = MlflowClient()
+    alias_info_map = {}
+    version_alias_map = {}
+    versions = client.search_model_versions(f"name='{model_name}'")
+    for v in versions:
+        mv = client.get_model_version(name=model_name, version=v.version)
+        if mv.aliases:
+            for alias in mv.aliases:
+                if alias not in version_alias_map:
+                    version_alias_map[alias] = []
+                version_alias_map[alias].append(mv.version)
+
+    for alias, versions in version_alias_map.items():
+        if versions:
+            numeric_versions = [int(v) for v in versions]
+            latest_version = max(numeric_versions)
+            mv = client.get_model_version(name=model_name, version=latest_version)
+            tags = mv.tags if mv.tags else {}
+            alias_info_map[alias] = {
+                "version": latest_version,
+                "training_start": tags.get('training_start', ''),
+                "training_end": tags.get('training_end', ''),
+            }
+
+    return alias_info_map
 
 def get_maximum_period(config):
     """
