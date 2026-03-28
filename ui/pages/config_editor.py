@@ -116,6 +116,14 @@ if 'available' not in st.session_state:
 
 #UI
 st.title("Configuration Editor")
+
+st.subheader("RL Configuration")
+rl_config = config.get('rl', {})
+for key,value in rl_config.items():
+    new_value = st.text_input(f"rl_{key}", value=str(value))
+    if new_value != value:
+        config['rl'][key] = type(value)(new_value)
+
 st.subheader("Inference Configuration")
 inference_config = config.get('inference', {})
 st.subheader("Schwab API Configuration")
