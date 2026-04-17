@@ -12,6 +12,7 @@ export default function Sidebar() {
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/dashboard/realtime', label: 'Realtime' },
     { href: '/dashboard/simulation', label: 'Simulation' },
+    { href: '/dashboard/simulation_rl', label: 'Simulation RL' },
   ]
   return (
     <aside className="w-full md:w-64 bg-gray-800 text-white flex-none">

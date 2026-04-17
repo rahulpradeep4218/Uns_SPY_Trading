@@ -7,6 +7,7 @@ import { SimulationOptions } from "@/app/types";
 
 // Doing lazy dynamic loading for TimelineSelection component to avoid SSR issues
 import dynamic from 'next/dynamic';
+import { set } from "lodash";
 const TimelineSelection = dynamic(() => import('@/components/TimelineSelection'), {
     ssr: false,
     loading: () => <div className="flex items-center justify-center h-full">Loading RL timeline selection...</div>
@@ -28,6 +29,8 @@ export default function SimulationRLConfig() {
         simulationOptions,
         setSimulationOptions,
         setIsRealtime,
+        sim_type,
+        setSimType
     } = usePageContext();
     const low_model_name = process.env.NEXT_PUBLIC_LOW_MODEL_NAME || 'low_model';
     const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
@@ -40,6 +43,7 @@ export default function SimulationRLConfig() {
     
     useEffect(() => {
         setIsRealtime?.(false); // Ensure realtime is set to false for simulation
+        setSimType('RLSimulated'); // Set sim type to RLSimulated for this dashboard
     },[]);
     useEffect(() => {
         if (!showTimePickerFor) return;

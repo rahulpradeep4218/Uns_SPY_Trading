@@ -25,7 +25,7 @@ import {
     Grid,
     Stack
 } from "@mui/material";
-import { set } from "lodash";
+
 
 export const defaultSimulationOptions: SimulationOptions = {
     close_at_eod: false,
@@ -40,6 +40,8 @@ export const defaultSimulationOptions: SimulationOptions = {
     allow_multiple_open_trades: true,
     close_using_signal: true,
     speed: 2, // Fast speed
+    starting_balance: 10000, // $10,000
+    max_day_loss_percent: 2, // 2% max daily loss
 };
 
 export const SimulationOptionsForm= () => {
@@ -47,15 +49,17 @@ export const SimulationOptionsForm= () => {
     const { 
         simulationOptions, 
         setSimulationOptions,
-        isRealtime
+        isRealtime,
+        sim_type
     } = usePageContext();
-    
+    const isRL = sim_type === "RLSimulated";
+    const type = isRealtime ? "realtime" : isRL ? "rl_simulation" : "simulation";
     const update_simulation_options_backend = async (options: SimulationOptions) => {
         try {
-            const sim_type = isRealtime ? "realtime" : "simulation";
-            console.log("Updating simulation options for type:", sim_type, "with options:", options);
+            
+            console.log("Updating simulation options for type:", type, "with options:", options);
             const url = process.env.NEXT_PUBLIC_INF_URL;
-            const response = await fetch(`${url}/api/process/set_simulation_options?type=${sim_type}`, {
+            const response = await fetch(`${url}/api/process/set_simulation_options?type=${type}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -73,9 +77,8 @@ export const SimulationOptionsForm= () => {
     // Initialize form values with  options obtained from api call
     const file_simulation_options = async () => {
         try {
-            const sim_type = isRealtime ? "realtime" : "simulation";
             const url = process.env.NEXT_PUBLIC_INF_URL;
-            const response = await fetch(`${url}/api/process/get_simulation_options?type=${sim_type}`);
+            const response = await fetch(`${url}/api/process/get_simulation_options?type=${type}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch simulation options');
             }
@@ -185,6 +188,57 @@ export const SimulationOptionsForm= () => {
                         },
                     },
                 }}>
+                    {isRL ? (
+                        /* RL ONLY VIEW */
+                        <>
+                            <TextField
+                                size="small"
+                                label="Initial Balance ($)"
+                                type="number"
+                                name="balance"
+                                value={formValues?.starting_balance || 10000}
+                                onChange={handleInputChange}
+                                fullWidth
+                            />
+
+                            <TextField
+                                size="small"
+                                label="Max Percent Loss (%)"
+                                type="number"
+                                name="max_percent_loss"
+                                value={formValues?.max_day_loss_percent || 2}
+                                onChange={handleInputChange}
+                                fullWidth
+                            />
+
+                            <Box>
+                                <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+                                    Speed: {formValues?.speed}
+                                </Typography>
+                                <Slider
+                                    size="small"
+                                    value={formValues?.speed}
+                                    onChange={handleSliderChange("speed")}
+                                    min={1}
+                                    max={10}
+                                />
+                            </Box>
+
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        size="small"
+                                        checked={formValues?.close_at_eod}
+                                        onChange={handleInputChange}
+                                        name="close_at_eod"
+                                    />
+                                }
+                                label="Close at EOD"
+                            />
+                        </>
+                    ) : (
+                        /* STANDARD SIMULATION VIEW */
+                    <>    
                     {/* Boolean Options */}
                     <FormControlLabel
                         control={
@@ -371,9 +425,11 @@ export const SimulationOptionsForm= () => {
                             max={process.env.NEXT_PUBLIC_MAX_SPEED ? parseInt(process.env.NEXT_PUBLIC_MAX_SPEED) : 10}
                         />
                     </Box>
+                </>
+                )}
                 </Stack>
             </Paper>
         </Box>
     );
 
-}
+};

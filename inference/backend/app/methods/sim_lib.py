@@ -164,7 +164,8 @@ async def create_trade_for_rl(
     current_candle: PriceData,
     signal: int,
     isRealtime: bool = False,
-    inf_config: Dict[str, Any] = {}
+    inf_config: Dict[str, Any] = {},
+    daily_loss_limit: float = None
     ):
     current_close = current_candle.close
     end_of_day_cutoff_hour = inf_config.get("inference").get("end_of_day_cutoff_hour", 15)
@@ -175,8 +176,14 @@ async def create_trade_for_rl(
     else:
         cutoff_passed = False
 
-    def open_trade_or_not():
-        
+    async def open_trade_or_not():
+        day_profit = await get_total_profit_for_day(
+            db=db,
+            session_id=session.id,
+            day_date=current_candle.time.date(),     
+        )     
+        if daily_loss_limit is not None and day_profit < -daily_loss_limit:
+            return False
         if signal == 1 or signal == 2:
             existing_trade = db.query(TradeRecord).filter(
                 TradeRecord.session_id == session.id,
@@ -189,7 +196,7 @@ async def create_trade_for_rl(
             return True
         return False
     
-    open_trade = open_trade_or_not()
+    open_trade = await open_trade_or_not()
 
     if open_trade:
         status = "OPEN"
@@ -340,6 +347,15 @@ async def create_trade_for_candle(
         print(f"Updated existing record for session {session.id} and symbol {session.symbol} at time {current_candle.time}")
 
     return new_trade_record
+async def get_total_profit_for_day(db: Session, session_id: int, day_date):
+    trades_closed = db.query(TradeRecord).filter(
+        TradeRecord.session_id == session_id,
+        TradeRecord.status == "CLOSED",
+        TradeRecord.trade_time >= day_date,
+        TradeRecord.trade_time < day_date + timedelta(days=1)
+    ).all()
+    total_profit = sum(trade.profit for trade in trades_closed)
+    return total_profit
 
 async def calculate_daily_loss_rl(
         sim_options: SimulationOptions,
@@ -362,13 +378,21 @@ async def check_trade_exit_rl(
     current_candle: PriceData,
     sim_options: SimulationOptions,
     current_signal: int = 0,
-    daily_loss_limit: float = None
+    daily_loss_limit: float = None,
+    multiplier: float = 50.0,
+    db: Session = None
 ):
     current_close = current_candle.close
     trade.profit = current_close - trade.entry_price if trade.signal == 1 else trade.entry_price - current_close  
+    trade.profit = trade.profit * multiplier
+    day_profit = await get_total_profit_for_day(
+        db=db,
+        session_id=trade.session_id,
+        day_date=trade.trade_time.date()
+    )
     #### Check different conditions of closing the trade
     close_trade = False
-    if trade.profit < -daily_loss_limit:
+    if trade.profit + day_profit < -daily_loss_limit:
         close_trade = True
         status_update = "DAILY_LOSS_LIMIT"
     elif current_candle.time.hour >= 15 and current_candle.time.minute >= 40 and sim_options.close_at_eod:
@@ -385,6 +409,8 @@ async def check_trade_exit_rl(
         trade.status = "CLOSED"
         trade.exit_price = current_close
         trade.exit_reason = status_update
+        trade.exit_time = current_candle.time
+        trade.exit_price = current_close
 
     return trade.status
 
@@ -489,14 +515,17 @@ async def run_simulation_one_rl_step(
         TradeRecord.session_id == session.id,
         TradeRecord.status == "OPEN"
     ).all()
-
+    option_multiplier = config['rl_inference']['rl_option_multiplier']
     for trade in open_trades:
         await check_trade_exit_rl(
             trade=trade,
             current_candle=current_candle,
             sim_options=sim_options,
             current_signal=action,
-            daily_loss_limit=daily_loss_limit
+            daily_loss_limit=daily_loss_limit,
+            db=db,
+            multiplier=option_multiplier
+
         )
     db.commit()  # Commit the changes to the database
     #db.refresh(TradeRecord)  # Refresh the session to get the latest data
@@ -508,7 +537,8 @@ async def run_simulation_one_rl_step(
         current_candle=current_candle,
         signal=action,
         isRealtime=False,
-        inf_config=config
+        inf_config=config,
+        daily_loss_limit=daily_loss_limit
     )
 
     return {

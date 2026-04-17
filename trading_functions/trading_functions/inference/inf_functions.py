@@ -201,7 +201,7 @@ def transform_for_inference(data, config, scalers):
     logger.debug("Starting data transformation for inference.")
     logger.debug(f"Initial data shape: {data.shape}")
     # Make datetime column a pd.datetime object
-    data['Date'] = pd.to_datetime(data['Date'])
+    data.loc[:, 'Date'] = pd.to_datetime(data['Date'])
     logger.debug("Converted 'Date' column to datetime.")
 
     # Normalize time gaps
@@ -413,7 +413,7 @@ def mlflow_aliases(config):
     return result
 
 def mlflow_aliases_rl(config):
-    model_name = config['rl']['model_high_alias']
+    model_name = config['rl_inference']['rl_model_name']
     mlflow_tracking = config['mlflow']['tracking_uri']
     logger.info(f"Fetching RL MLflow aliases for models: {model_name} from tracking URI: {mlflow_tracking}")
     if mlflow_tracking:

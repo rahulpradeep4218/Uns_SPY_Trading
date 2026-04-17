@@ -1,7 +1,7 @@
 -- Step 2a: Create 'trades' table (parent)
 CREATE TABLE IF NOT EXISTS trade_sessions (
     id SERIAL PRIMARY KEY,
-    type VARCHAR(20) CHECK (type IN ('Realtime', 'Simulated')) NOT NULL,
+    type VARCHAR(20) CHECK (type IN ('Realtime', 'Simulated', 'RLSimulated')) NOT NULL,
     symbol VARCHAR(20) NOT NULL,
     trade_start TIMESTAMP NOT NULL,
     trade_end TIMESTAMP NOT NULL,
@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS trade_records(
     session_id INTEGER REFERENCES trade_sessions(id) ON DELETE CASCADE,
     symbol VARCHAR(20) NOT NULL,
     trade_time TIMESTAMP NOT NULL,
+    exit_time TIMESTAMP,
     PRIMARY KEY (session_id, symbol, trade_time),
     high_val NUMERIC(12, 4),
     low_val NUMERIC(12, 4),

@@ -3,6 +3,7 @@ from gymnasium import spaces
 import numpy as np
 from datetime import datetime, timedelta
 from rl_functions.utils import get_data
+import pandas as pd
 
 
 class TradingEnv(gym.Env):
@@ -58,11 +59,15 @@ class TradingEnv(gym.Env):
 
         super().reset(seed=seed)
         # Load data for a random trading day
-        self.data, status = get_data( symbol=self.symbol, 
-                             start_date=self.start_date, 
-                             end_date=self.end_date, 
-                             db=self.db, 
-                             evaluation=self.evaluation)
+        if self.start_date is None or self.end_date is None:
+            self.logger.warning("Start date or end date is None in TradingEnv. Data loading may fail.")
+            self.data = pd.DataFrame()  # Empty DataFrame to avoid crashes, but will lead to no trading
+        else:
+            self.data, status = get_data( symbol=self.symbol, 
+                                start_date=self.start_date, 
+                                end_date=self.end_date, 
+                                db=self.db, 
+                                evaluation=self.evaluation)
         
         self.data.reset_index(drop=True, inplace=True)
         self.logger.info(f"Data shape : {self.data.shape}")
@@ -377,6 +382,11 @@ class LiveTradingEnv(TradingEnv):
     one row at a time from the RL_Stream_Data generator.
     """
     def __init__(self, db, symbol, obs_features, streamer, **kwargs):
+
+        self.stream_gen = None
+        self.current_row = None
+        self.last_timestamp = None
+        self.streamer = streamer
         # We pass dummy dates because the streamer controls the timeline
         super().__init__(
             db=db, 
@@ -387,10 +397,8 @@ class LiveTradingEnv(TradingEnv):
             evaluation=True, 
             **kwargs
         )
-        self.streamer = streamer
-        self.stream_gen = None
-        self.current_row = None
-        self.last_timestamp = None
+        
+        
         
         if self.logger:
             self.logger.info("LiveTradingEnv initialized and ready for streaming.")
@@ -399,8 +407,18 @@ class LiveTradingEnv(TradingEnv):
         """
         Resets the environment state and restarts the data stream.
         """
+
+        self.stream_gen = self.streamer.stream()
+
+        # Pull the first row to initialize the observation space
+        try:
+            self.current_row = next(self.stream_gen)
+            self.last_timestamp = self.current_row['Date']
+        except StopIteration:
+            raise RuntimeError("Streamer yielded no data during reset.")
+        
         # Call Gymnasium's base reset for seeding
-        super(gym.Env, self).reset(seed=seed)
+        obs, info = super().reset(seed=seed, options=options)
         
         # Reset internal trading metrics
         self.pnl = 0.0
@@ -420,31 +438,16 @@ class LiveTradingEnv(TradingEnv):
         self.total_intermediate_given = 0.0
         self.winning_trades = 0
         self.losing_trades = 0
-        self.pnl_history = []
+        self.pnl_history = []     
         self.pnl_list = [0.0]
         self.xg_high = 0.0
         self.xg_low = 0.0
 
         # Initialize the Streamer Generator
-        self.stream_gen = self.streamer.stream()
-        
-        # Pull the first row to initialize the observation space
-        try:
-            self.current_row = next(self.stream_gen)
-            self.last_timestamp = self.current_row['Date']
-        except StopIteration:
-            raise RuntimeError("Streamer yielded no data during reset.")
 
-        # Define Observation Space based on features + 4 agent state vars
-        # Agent state: [is_active, direction, time_norm (placeholder), loss_ratio]
-        agent_state_dim = 4
-        obs_dim = len(self.obs_features) + agent_state_dim
-        self.observation_space = spaces.Box(
-            low=-10.0, high=10.0, shape=(obs_dim,), dtype=np.float32
-        )
-
+ 
         info = {"timestamp": self.last_timestamp}
-        return self._get_observation(), info
+        return obs, info
 
     def _get_observation(self):
         """

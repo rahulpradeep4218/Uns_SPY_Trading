@@ -4,7 +4,7 @@ import TradeSessionsTable from '@/components/TradeSessionsTable';
 import  TradeStatsDashboard  from "@/components/Trade_Stats/TradeStatsDashboard";
 import { usePageContext } from '@/context/PageContext';
 import { Typography } from '@mui/material';
-import TradeSignalControls from '@/components/sciChart/TradeMarkers';
+//import TradeSignalControls from '@/components/sciChart/TradeMarkers';
 
 const UserAnnotatedStockChart = dynamic(() => import('@/components/sciChart/annot-chart'), {ssr: false});
 

@@ -44,7 +44,15 @@ const STORAGE_KEY = "Annotated-Charts";
 export default function UserAnnotatedStockChart() {
     // const sciChartSurfaceRef = React.useRef<SciChartSurface>(undefined);
     // const controlsRef = React.useRef<TResolvedReturnType<typeof initializeCandleStickChart>["controls"]>(undefined);
-    const { sciChartSurfaceRef, chartControlsRef , candleDataSeriesRef, realtimeSeriesRef, buyTakeProfitRef, sellTakeProfitRef } = usePageContext();
+    const { 
+        sciChartSurfaceRef, 
+        chartControlsRef , 
+        candleDataSeriesRef, 
+        realtimeSeriesRef, 
+        buyTakeProfitRef, 
+        sellTakeProfitRef,
+        sim_type
+    } = usePageContext();
     const [name, setName] = React.useState<string>("");
     const [chartMode, setChartMode] = React.useState<"line" | "marker" | "pan" | "horline">("pan");
     const [savedCharts, setSavedCharts] = React.useState<Record<string, object>>({});
@@ -194,7 +202,7 @@ export default function UserAnnotatedStockChart() {
                     </div>
                     <SciChartReact
                         className={classes.chartArea}
-                        initChart={(divElementId) => initializeCandleStickChart(divElementId, candleDataSeriesRef!, realtimeSeriesRef!, buyTakeProfitRef!, sellTakeProfitRef!)}
+                        initChart={(divElementId) => initializeCandleStickChart(divElementId, candleDataSeriesRef!, realtimeSeriesRef!, buyTakeProfitRef!, sellTakeProfitRef!, sim_type)}
                         onInit={({ sciChartSurface, controls }: TResolvedReturnType<typeof initializeCandleStickChart>) => {
                             sciChartSurfaceRef!.current = sciChartSurface;
                             chartControlsRef!.current = controls;

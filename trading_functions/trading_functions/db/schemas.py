@@ -21,6 +21,7 @@ class PriceDataResponse(PriceDataBase):
 class TradeRecordBase(BaseModel):
     session_id: int
     trade_time: datetime
+    exit_time: Optional[datetime] = None
     high_val: float = None
     low_val: float = None
     signal: int = None

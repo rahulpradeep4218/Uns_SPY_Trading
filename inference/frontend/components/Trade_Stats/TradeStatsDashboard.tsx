@@ -35,7 +35,8 @@ export default function TradeStatsDashboard() {
         buyTakeProfitRef,
         sellTakeProfitRef,
         isRealtime,
-        setIsRealtime
+        setIsRealtime,
+        sim_type
     } = usePageContext();
 
     const currentCandleRef = useRef<{
@@ -65,16 +66,17 @@ export default function TradeStatsDashboard() {
         //const wsProtocol = rawUrl?.startsWith('https') ? 'wss' : 'ws';
         const wsProtocol = 'wss'; // Force WebSocket Secure (wss) for all connections
         const window_url = window.location.origin.replace(/^http/, 'ws');
+        const sim_text = sim_type === 'RLSimulated' ? 'simulation_rl' : 'simulation';
         let socketUrl = '';
         if (process.env.NEXT_PUBLIC_DEV_MODE === 'true') {
             socketUrl = isRealtime 
             ? `${process.env.NEXT_PUBLIC_INF_URL!.replace(/^http/, 'ws')}/api/process/ws/realtime`
-            : `${process.env.NEXT_PUBLIC_INF_URL!.replace(/^http/, 'ws')}/api/process/ws/simulation/${selected_session}`;
+            : `${process.env.NEXT_PUBLIC_INF_URL!.replace(/^http/, 'ws')}/api/process/ws/${sim_text}/${selected_session}`;
         }
         else {
             socketUrl = isRealtime 
             ? `${window_url}/${strippedUrl}/api/process/ws/realtime`
-            : `${window_url}/${strippedUrl}/api/process/ws/simulation/${selected_session}`;
+            : `${window_url}/${strippedUrl}/api/process/ws/${sim_text}/${selected_session}`;
         }
         console.log("WebSocket URL:", socketUrl);
         const socket = new WebSocket(socketUrl);
@@ -110,7 +112,8 @@ export default function TradeStatsDashboard() {
                     renderTradeMarkers(
                         sciChartSurfaceRef.current, 
                         data.data,
-                        tradeMarkerMapRef
+                        tradeMarkerMapRef,
+                        sim_type
                     );
                 }
             }

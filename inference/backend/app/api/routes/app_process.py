@@ -127,8 +127,8 @@ def get_artifacts_for_model_inference_RL(session_record: TradeSession, db: Sessi
 
     ### Calculation of start time and end time
     if simulation:
-        start_time = session_record.trade_start.date() 
-        end_time = session_record.trade_end.date()
+        start_time = session_record.trade_start
+        end_time = session_record.trade_end
     stream_data = RL_Stream_Data(
         db=db,
         symbol=symbol,
@@ -148,8 +148,8 @@ def get_artifacts_for_model_inference_RL(session_record: TradeSession, db: Sessi
                     symbol=symbol, 
                     logger=logger
                 )
-    model = PPO.load(model_local_path, env=vec_env)
-    vec_env = VecNormalize.load(vec_norm_local_path, env=vec_env)
+    model = PPO.load(model_local_path)
+    vec_env = VecNormalize.load(vec_norm_local_path, vec_env)
     vec_env.training = False
     vec_env.norm_obs = True
 
@@ -255,7 +255,7 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
     if session.trade_end is None or session.trade_start is None or session.trade_end == session.trade_start:
         schwab_config = get_inf_config()['inference']['schwab']
-        trade_start, trade_end = get_first_record_time_realtime(db=db, schwab_config=schwab_config, session_record=session)
+        trade_start, trade_end = await get_first_record_time_realtime(db=db, schwab_config=schwab_config, session_record=session)
         logger.info(f"Session trade start or end is none or equal indicating that its a realtime session , so got trade_start: {trade_start} and trade_end: {trade_end}")
 
         trade_start_str = trade_start.strftime("%Y-%m-%d ") + "00:00:00"
@@ -268,12 +268,11 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
         logger.info(f"Got session start and end from session record, Session trade start: {trade_start_str} and trade_end: {trade_end_str}")
 
 
-    candles_query = db.query(PriceData).filter(
+    all_candles_count = db.query(PriceData).filter(
             PriceData.symbol == session.symbol,
             PriceData.time <= trade_end_str,
             PriceData.time >= trade_start_str
-        ).all()
-    all_candles_count = len(candles_query)
+        ).count()
 
     last_trade_signal_row = db.query(TradeRecord).filter(
         TradeRecord.session_id == session_id,
@@ -284,30 +283,30 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
         last_trade_signal_time = None
     progress = 0.0
     if last_trade_signal_time:    
-        candles_till_now = db.query(PriceData).filter(
+        candle_till_now_count = db.query(PriceData).filter(
             PriceData.symbol == session.symbol,
             PriceData.time <= last_trade_signal_time
-        ).all()
-        candle_till_now_count = len(candles_till_now)
-        trade_till_now = db.query(TradeRecord).filter(
+        ).count()
+
+        trade_till_now_count = db.query(TradeRecord).filter(
             TradeRecord.session_id == session_id,
             TradeRecord.trade_time <= last_trade_signal_time,
             TradeRecord.trade_time >= session.trade_start
-        ).all()
-        trade_till_now_count = len(trade_till_now)
+        ).count()
+        
         if all_candles_count > 0:
             progress = trade_till_now_count / all_candles_count * 100
         else:
             progress = 0.0
 
 
-    all_trades, trade_stats = get_trade_and_trade_stats(
+    all_trades, trade_stats = await get_trade_and_trade_stats(
         db,
         session_id,
         progress
     )
 
-    take_profits = get_trade_record_values(
+    take_profits = await get_trade_record_values(
         db=db,
         session_id=session_id,
         trade_start=trade_start,
@@ -377,7 +376,7 @@ async def websocket_simulation_rl(
         #print("Total candles to process:", len(candles))
 
         #### Calculate the daily loss based on the starting balance from simulation options and the profit
-        daily_loss = calculate_daily_loss_rl(
+        daily_loss = await calculate_daily_loss_rl(
             db=db,
             session_id=session_id,
             sim_options=sim_options,
@@ -400,6 +399,7 @@ async def websocket_simulation_rl(
         current_day = None
         while True:
             action, _ = rl_model.predict(obs, deterministic=True)
+            action_int = int(action[0])
             current_ts = raw_env.last_timestamp
 
             if not current_day:
@@ -408,7 +408,7 @@ async def websocket_simulation_rl(
             if current_ts.date() != current_day:
                 logger.info(f"New day reached in simulation: {current_ts.date()}. Current timestamp: {current_ts}")
                 current_day = current_ts.date()
-                daily_loss = calculate_daily_loss_rl(
+                daily_loss = await calculate_daily_loss_rl(
                     db=db,
                     session_id=session_id,
                     sim_options=sim_options,
@@ -420,20 +420,20 @@ async def websocket_simulation_rl(
                     logger.info(f"Switching to live mode as current timestamp has reached or passed the session start time and there is no active trade. Current timestamp: {current_ts}, Session start time: {start_time}")
                     is_live_mode = True
                 else:
-                    logger.info(f"Not switching to live mode even though current timestamp has reached or passed the session start time because there is an active trade. Current timestamp: {current_ts}, Session start time: {start_time}, Active trade entry price: {raw_env.active_trade.entry_price}, Active trade signal: {raw_env.active_trade.signal}")
+                    logger.info(f"Not switching to live mode even though current timestamp has reached or passed the session start time because there is an active trade. Current timestamp: {current_ts}, Session start time: {start_time}")
 
             if is_live_mode:
                 current_candle = db.query(PriceData).filter(
                     PriceData.symbol == session_record.symbol,
                     PriceData.time == current_ts
                 ).first()
-                status = run_simulation_one_rl_step(
+                status = await run_simulation_one_rl_step(
                     db=db,
                     session=session_record,
                     config=inf_config,
                     current_candle=current_candle,
                     sim_options=sim_options,
-                    action=action,
+                    action=action_int,
                     daily_loss_limit=daily_loss
                 )
                 trade_signals_till_now = db.query(TradeRecord).filter(
@@ -448,7 +448,7 @@ async def websocket_simulation_rl(
                     "data": [serialize_candle(current_candle)]
                 })
 
-                all_trades, trade_stats = get_trade_and_trade_stats(
+                all_trades, trade_stats = await get_trade_and_trade_stats(
                     db,
                     session_id,
                     progress
@@ -459,7 +459,7 @@ async def websocket_simulation_rl(
                     "data": trade_stats.model_dump()
                 })
 
-                take_profits = get_trade_record_values(
+                take_profits = await get_trade_record_values(
                     db=db,
                     session_id=session_id,
                     trade_start=session_record.trade_start,
@@ -578,7 +578,7 @@ async def websocket_simulation(
                 "data": [serialize_candle(current_candle)]
             })
 
-            all_trades, trade_stats = get_trade_and_trade_stats(
+            all_trades, trade_stats = await get_trade_and_trade_stats(
                 db,
                 session_id,
                 progress
@@ -589,7 +589,7 @@ async def websocket_simulation(
                 "data": trade_stats.model_dump()
             })
 
-            take_profits = get_trade_record_values(
+            take_profits = await get_trade_record_values(
                 db=db,
                 session_id=session_id,
                 trade_start=session_record.trade_start,
@@ -614,7 +614,7 @@ async def websocket_simulation(
 
 
 
-def get_first_record_time_realtime(db: Session, schwab_config, session_record: TradeSession) -> datetime:
+async def get_first_record_time_realtime(db: Session, schwab_config, session_record: TradeSession) -> datetime:
     realtime_period_days = schwab_config.get('realtime_period_days', 1)
     last_candle = db.query(PriceData).filter(
         PriceData.symbol == session_record.symbol
@@ -633,7 +633,7 @@ def get_first_record_time_realtime(db: Session, schwab_config, session_record: T
         return None
 
 
-def get_trade_record_values(
+async def get_trade_record_values(
         db: Session, 
         session_id: int, 
         trade_start: datetime, 
@@ -759,7 +759,7 @@ async def websocket_realtime(
                             "data": candle_table
                         })
 
-                        take_profits = get_trade_record_values(
+                        take_profits = await get_trade_record_values(
                             db=db,
                             session_id=session_id,
                             trade_start=first_record_time,
@@ -848,7 +848,7 @@ async def websocket_realtime(
         print(f"Client disconnected from session {session_id}")
 
 
-def get_trade_and_trade_stats(db: Session, session_id: int, progress: float):
+async def get_trade_and_trade_stats(db: Session, session_id: int, progress: float):
     trades_closed = db.query(TradeRecord).filter(
         TradeRecord.session_id == session_id,
         TradeRecord.status == "CLOSED",

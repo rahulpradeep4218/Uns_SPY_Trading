@@ -1,6 +1,6 @@
 'use client'
 import { DateTime } from "luxon";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DataGrid, GridColDef, GridActionsCellItem, GridRowSelectionModel } from '@mui/x-data-grid';
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
 import { Delete, Edit } from '@mui/icons-material';
@@ -40,6 +40,7 @@ export default function TradeSessionsTable() {
         timeRange, setTimeRange, 
         model_high_alias, setModelHighAlias, 
         model_high_version, setModelHighVersion, 
+        model_rl_alias, setModelRLAlias,
         model_low_alias, setModelLowAlias, 
         model_low_version, setModelLowVersion, 
         selected_session, setSelectedSession,
@@ -49,9 +50,180 @@ export default function TradeSessionsTable() {
         setTrainingEnd,
         sciChartSurfaceRef,
         tradeMarkerMapRef,
-        candleDataSeriesRef
+        candleDataSeriesRef,
+        sim_type,
+        setSimType
      } = usePageContext();
     // Fetch data from API
+
+    const fetchModelAliases = async ()=> {
+        try{
+            const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+            const res = await fetch(`${inf_url}/api/mlflow/models_info`);
+            const data = await res.json();
+            console.log("Model Aliases:", data);
+            return data;
+        } catch (error) {
+            console.error("Error fetching model aliases:", error);
+        }
+    };
+
+    const fetchRLModelAliases = async ()=> {
+        try{
+            const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+            const res = await fetch(`${inf_url}/api/mlflow/rl_models_info`);
+            const data = await res.json();
+            console.log("Model Aliases:", data);
+            return data;
+        } catch (error) {
+            console.error("Error fetching model aliases:", error);
+        }
+    };
+
+    /*
+    const handleRowSelection = (selectionModel: GridRowSelectionModel) => {
+        // 1. Convert to a standard array to ensure .length works
+        const ids = selectionModel as unknown as number[];
+
+        if (!ids || ids.length === 0) {
+            setSelectedSession(null);
+            return;
+        }
+
+        // 2. Get the last selected ID
+        // We cast to 'number' because your DB IDs are numbers
+        const lastSelectedId = ids[ids.length - 1];
+
+        if (typeof lastSelectedId === 'number') {
+            setSelectedSession(lastSelectedId);
+            updateCurrentSessionData(lastSelectedId);
+            console.log("Selected session ID:", lastSelectedId);
+        }
+    };
+*/
+
+
+    const updateCurrentSessionData = useCallback(async (sess_id: number) => {
+
+        try{
+            console.log("Fetching session details for ID:", sess_id);
+            const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
+        
+            console.log("Base URL for fetching session details:", baseUrl);
+            const response = await fetch(`${baseUrl}/api/process/get_session/${sess_id}`);
+            const jsonResponse = await response.json();
+            console.log("Session details response:", jsonResponse);
+            const session_record = jsonResponse.session
+            const trade_stats = jsonResponse.trade_stats;
+            const trade_records = jsonResponse.trades;
+            const last_trade_signal_time = jsonResponse.last_trade_signal_time;
+            console.log("Fetched session details:", session_record);
+            if (sim_type === 'Simulated'){
+                setModelHighAlias(session_record.model_high_alias);
+                console.log("Setting model_high_alias to:", session_record.model_high_alias);
+                setModelHighVersion(session_record.model_high_version);
+                setModelLowAlias(session_record.model_low_alias);
+                setModelLowVersion(session_record.model_low_version);
+            }
+            else if (sim_type === 'RLSimulated') {
+                setModelRLAlias(session_record.model_high_alias);
+                console.log("Setting model_rl_alias to:", session_record.model_high_alias);
+                setModelHighVersion(session_record.model_high_version);
+            }
+            setTimeRange({
+                start: session_record.trade_start,
+                end: session_record.trade_end
+            });
+
+            setTradeStats(trade_stats);
+            setTradeRecords(trade_records);
+            
+
+            if (sim_type === 'Simulated') {
+                const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
+                const modelAliases_mlflow = await fetchModelAliases();
+                if (modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_start']) {
+                    setTrainingStart(modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_start']);
+                }
+                if (modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_end']) {
+                    setTrainingEnd(modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_end']);
+                }
+            }
+            else if (sim_type === 'RLSimulated') {
+                const rl_modelAliases_mlflow = await fetchRLModelAliases();
+                if (rl_modelAliases_mlflow[session_record.model_high_alias]['training_start']) {
+                    setTrainingStart(rl_modelAliases_mlflow[session_record.model_high_alias]['training_start']);
+                }
+                if (rl_modelAliases_mlflow[session_record.model_high_alias]['training_end']) {
+                    setTrainingEnd(rl_modelAliases_mlflow[session_record.model_high_alias]['training_end']);
+                }
+            }
+
+            const inf_url = process.env.NEXT_PUBLIC_INF_URL;
+            let ohlcDataUrl = `${inf_url}/api/price_data/${session_record.symbol}`;
+            if (last_trade_signal_time) {
+                ohlcDataUrl += `?end_time=${last_trade_signal_time}`;
+            }
+            else {
+                ohlcDataUrl += `?end_time=${session_record.trade_start}`;
+            }
+                
+            const res = await fetch(ohlcDataUrl)
+            const ohlcData = await res.json();
+            const xValues = ohlcData.map((item: any) => {
+                const dt = DateTime.fromISO(item.time, { zone: "America/New_York" });
+                if (!dt.isValid) {
+                    console.error("Invalid date in OHLC data:", item.time);
+                    return null; // or handle the error as needed
+                }
+                return dt.toMillis();
+            });
+            const openValues = ohlcData.map((item: any) => item.open);
+            const highValues = ohlcData.map((item: any) => item.high);
+            const lowValues = ohlcData.map((item: any) => item.low);
+            const closeValues = ohlcData.map((item: any) => item.close);
+            console.log("Fetched OHLC Data")  
+            await candleDataSeriesRef?.current?.clear();
+            await candleDataSeriesRef?.current?.appendRange(
+                xValues,
+                openValues,
+                highValues,
+                lowValues,
+                closeValues
+            );
+            console.log("Updated candlestick series with OHLC data");
+
+            //sciChartSurfaceRef.current?.zoomExtents();
+            renderTradeMarkers(
+                    sciChartSurfaceRef?.current!,
+                    trade_records,
+                    tradeMarkerMapRef,
+                    sim_type
+            );
+            console.log("Rendered trade markers on chart");
+            
+
+
+        } catch (error) {
+            console.error("Error fetching session details:", error);
+        }
+    }, [
+        selected_session,
+        sim_type, 
+        setModelHighAlias, 
+        setModelHighVersion, 
+        setModelLowAlias, 
+        setModelLowVersion, 
+        setModelRLAlias,
+        setTimeRange, 
+        setTradeStats, 
+        setTradeRecords, 
+        setTrainingStart, 
+        setTrainingEnd,
+        candleDataSeriesRef, // Refs are stable, but good practice to include
+        sciChartSurfaceRef,
+        tradeMarkerMapRef
+    ]);
 
     const handleRowSelection = (model: {
         type: 'include' | 'exclude';
@@ -76,109 +248,23 @@ export default function TradeSessionsTable() {
     };
 
 
-    const updateCurrentSessionData = (sess_id: number) => {
-        const fetchSessionDetails = async () => {
-            try{
-                console.log("Fetching session details for ID:", sess_id);
-                const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
-
-                console.log("Base URL for fetching session details:", baseUrl);
-                const response = await fetch(`${baseUrl}/api/process/get_session/${sess_id}`);
-                const jsonResponse = await response.json();
-                console.log("Session details response:", jsonResponse);
-                const session_record = jsonResponse.session
-                const trade_stats = jsonResponse.trade_stats;
-                const trade_records = jsonResponse.trades;
-                const last_trade_signal_time = jsonResponse.last_trade_signal_time;
-                console.log("Fetched session details:", session_record);
-                setModelHighAlias(session_record.model_high_alias);
-                console.log("Setting model_high_alias to:", session_record.model_high_alias);
-                setModelHighVersion(session_record.model_high_version);
-                setModelLowAlias(session_record.model_low_alias);
-                setModelLowVersion(session_record.model_low_version);
-                setTimeRange({
-                    start: session_record.trade_start,
-                    end: session_record.trade_end
-                });
-
-                setTradeStats(trade_stats);
-                setTradeRecords(trade_records);
-                
-                const fetchModelAliases = async ()=> {
-                    try{
-                        const inf_url = process.env.NEXT_PUBLIC_INF_URL;
-                        const res = await fetch(`${inf_url}/api/mlflow/models_info`);
-                        const data = await res.json();
-                        console.log("Model Aliases:", data);
-                        return data;
-                    } catch (error) {
-                        console.error("Error fetching model aliases:", error);
-                    }
-                };
-                const high_model_name = process.env.NEXT_PUBLIC_HIGH_MODEL_NAME || 'high_model';
-                const modelAliases_mlflow = await fetchModelAliases();
-                if (modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_start']) {
-                    setTrainingStart(modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_start']);
-                }
-                if (modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_end']) {
-                    setTrainingEnd(modelAliases_mlflow[high_model_name][session_record.model_high_alias]['training_end']);
-                }
-                const inf_url = process.env.NEXT_PUBLIC_INF_URL;
-                let ohlcDataUrl = `${inf_url}/api/price_data/${session_record.symbol}`;
-                if (last_trade_signal_time) {
-                    ohlcDataUrl += `?end_time=${last_trade_signal_time}`;
-                }
-                else {
-                    ohlcDataUrl += `?end_time=${session_record.trade_start}`;
-                }
-                    
-                const res = await fetch(ohlcDataUrl)
-                const ohlcData = await res.json();
-                const xValues = ohlcData.map((item: any) => {
-                    const dt = DateTime.fromISO(item.time, { zone: "America/New_York" });
-                    if (!dt.isValid) {
-                        console.error("Invalid date in OHLC data:", item.time);
-                        return null; // or handle the error as needed
-                    }
-                    return dt.toMillis();
-                });
-                const openValues = ohlcData.map((item: any) => item.open);
-                const highValues = ohlcData.map((item: any) => item.high);
-                const lowValues = ohlcData.map((item: any) => item.low);
-                const closeValues = ohlcData.map((item: any) => item.close);
-                
-                await candleDataSeriesRef?.current?.clear();
-                await candleDataSeriesRef?.current?.appendRange(
-                    xValues,
-                    openValues,
-                    highValues,
-                    lowValues,
-                    closeValues
-                );
-
-                //sciChartSurfaceRef.current?.zoomExtents();
-                renderTradeMarkers(
-                        sciChartSurfaceRef?.current!,
-                        trade_records,
-                        tradeMarkerMapRef
-                );
-                
-
-
-            } catch (error) {
-                console.error("Error fetching session details:", error);
-            }
-        };
-        fetchSessionDetails();
-    }
 
     useEffect(() => {
+
+        // GUARD: If sim_type is missing or still an 'initial' state you want to skip, 
+        // don't fetch yet.
+        if (!sim_type) {
+            console.log("sim_type not ready, skipping fetch...");
+            return;
+        }
+
         const fetchData = async () => {
 
             const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
             console.log("Base Url for fetching sessions :", baseUrl);
-            const fullUrl = `${baseUrl}/api/trade_sessions/?type=Simulated`;
-            console.log("Fetching trade sessions from URL:", fullUrl);
+            // Change needed here to change type to RLSimulated or Simulated
+            const fullUrl = `${baseUrl}/api/trade_sessions/?type=${sim_type}`;
+            console.log("Fetching trade sessions from URL , check for RL:", fullUrl);
             const response = await fetch(`${fullUrl}`);
             // console.log("API data sample:", {
             //     firstItem: response.data[0],
@@ -203,7 +289,7 @@ export default function TradeSessionsTable() {
             setLoading(false);
         };
         fetchData();
-    }, []);
+    }, [sim_type]);
 
     const handleDelete = async (id: number) => {
         const baseUrl = typeof window === 'undefined' || process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? process.env.NEXT_PUBLIC_INF_URL : window.location.origin + process.env.NEXT_PUBLIC_INF_URL;
@@ -232,10 +318,18 @@ export default function TradeSessionsTable() {
             // console.log("Trade end : ", timeRange.end);
             currentSession.trade_start = timeRange.start;
             currentSession.trade_end = timeRange.end;
-            currentSession.model_high_alias = model_high_alias;
+            if (sim_type === 'Simulated') {
+                currentSession.model_high_alias = model_high_alias;
+                currentSession.model_low_alias = model_low_alias;
+                currentSession.model_low_version = model_low_version ? Number(model_low_version) : undefined;
+            }
+            else if (sim_type === 'RLSimulated') {
+                currentSession.model_high_alias = model_rl_alias;
+                currentSession.model_low_alias = 'dummy';
+                currentSession.model_low_version = 0;
+            }
             currentSession.model_high_version = model_high_version ? Number(model_high_version) : undefined;
-            currentSession.model_low_alias = model_low_alias;
-            currentSession.model_low_version = model_low_version ? Number(model_low_version) : undefined;
+            
             console.log("Time start :", timeRange.start);
             
             const method = currentSession.id ? 'PUT' : 'POST';
@@ -261,7 +355,6 @@ export default function TradeSessionsTable() {
                 ? sessions.map(session => session.id === currentSession.id ? responseData : session)
                 : [...sessions, responseData]);
         } 
-
 
         setOpen(false);
     };
@@ -344,8 +437,9 @@ export default function TradeSessionsTable() {
             variant="contained"
             sx={{mb: 2}}
             onClick={() => {
+                // Here we have to change type to RLSimulated or Simulated
                 setCurrentSession({...currentSession,
-                    type: 'Simulated', 
+                    type: sim_type, 
                     symbol: 'SPY', 
                 });
                 setOpen(true);

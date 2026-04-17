@@ -27,6 +27,8 @@ type PageContextType = {
     training_end: string | null;
     setTrainingEnd: (end: string | null) => void;
     setSelectedSession: (sessionId: number | null) => void;
+    sim_type: string;
+    setSimType: (value: string) => void;
     timeRange: {
         start: string | null;
         end: string | null;
@@ -120,6 +122,8 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
 
     const [isRealtime, setIsRealtime] = useState<boolean>(false);
 
+    const [sim_type, setSimType] = useState<string>(''); // Default to '', can be 'RLSimulated' or 'Simulated' etc.
+
     return (
         <PageContext.Provider 
         value={{ 
@@ -165,7 +169,9 @@ export const PageContextProvider = ({ children }: { children: ReactNode }) => {
             schwabConnStatus,
             setSchwabConnStatus,
             isRealtime,
-            setIsRealtime
+            setIsRealtime,
+            sim_type,
+            setSimType
         }}
         >
             {children}

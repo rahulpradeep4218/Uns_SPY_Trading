@@ -12,7 +12,9 @@ export interface TradeSession {
 
 export interface TradeRecord {
     trade_time: string | Date;
+    exit_time?: string | Date;
     entry_price: number;
+    exit_price?: number;
     high_val: number;
     low_val: number;
     buy_take_profit: number;

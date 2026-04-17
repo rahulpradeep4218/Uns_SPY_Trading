@@ -41,6 +41,7 @@ class TradeRecord(Base):
                             )  
     symbol: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
     trade_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, primary_key=True)
+    exit_time: Mapped[Optional[datetime]] = mapped_column(DateTime, default=None)
     high_val: Mapped[float] = mapped_column(Float)
     low_val: Mapped[float] = mapped_column(Float)
     signal: Mapped[int] = mapped_column(Integer, default=0)

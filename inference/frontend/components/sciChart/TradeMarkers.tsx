@@ -17,7 +17,7 @@ import { Button } from "@mui/material";
 import { TradeSignalOverlay } from "@/app/types";
 
 export default function TradeSignalControls() {
-    const { sciChartSurfaceRef } = usePageContext();
+    const { sciChartSurfaceRef, sim_type } = usePageContext();
 
     const addTrades = () => {
         const surface = sciChartSurfaceRef?.current;
@@ -65,7 +65,7 @@ export default function TradeSignalControls() {
 
             
             marker.hovered.subscribe((args) => {
-                if (args?.isHovered && !slBox && !tpBox) {
+                if (args?.isHovered && !slBox && !tpBox && sim_type !== 'RLSimulated') {
                     const chartStart = surface.xAxes.get(0).visibleRange.min;
                     const chartEnd = surface.xAxes.get(0).visibleRange.max;
 

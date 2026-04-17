@@ -55,6 +55,8 @@ import {
     DateLabelProvider,
     DataLabelProvider,
     EDataPointWidthMode,
+    DiscontinuousDateAxis,
+    EYRangeMode
 } from "scichart";
 
 import { appTheme } from "@/app/theme";
@@ -96,6 +98,7 @@ export const initializeCandleStickChart = async (
     realtimeSeriesRef: React.RefObject<OhlcDataSeries | null>,
     buyTakeProfitRef: React.RefObject<XyDataSeries | null>,
     sellTakeProfitRef: React.RefObject<XyDataSeries | null>,
+    sim_type: string
 ) => {
     SciChartSurface.configure({
         wasmUrl: "/trading/ui/scichart2d.wasm",
@@ -162,7 +165,7 @@ export const initializeCandleStickChart = async (
         dataSeriesName: "Sell Take Profits",
     });
     sellTakeProfitRef.current = sellTakeProfitDataSeries;
-
+    /*
     const xAxis = new DateTimeNumericAxis(wasmContext, {
         // autoRange.never as we're setting visibleRange explicitly below. If you dont do this, leave this flag default
         autoRange: EAutoRange.Never,
@@ -174,7 +177,16 @@ export const initializeCandleStickChart = async (
         growBy: new NumberRange(0.05, 0.05),
         labelProvider: utcProvider,
     });
-
+    */
+    const xAxis = new DiscontinuousDateAxis(wasmContext, {
+        // autoRange.never as we're setting visibleRange explicitly below. If you dont do this, leave this flag default
+        autoRange: EAutoRange.Never,
+        cursorLabelFormat: ENumericFormat.Date_HHMM,
+        labelFormat: ENumericFormat.Date_HHMM,
+        labelProvider: utcProvider
+        // Increase this threshold as the default value is right on our default range
+        //labelThresholds: { [ETradeChartLabelFormat.Minutes]: 60 * 60 * 24 * 10 },
+    });
     sciChartSurface.xAxes.add(xAxis);
 
     // ✅ Set visible range to last 100 candles
@@ -195,6 +207,7 @@ export const initializeCandleStickChart = async (
         brushDown: appTheme.MutedRed + "77",
         strokeUp: appTheme.VividGreen,
         strokeDown: appTheme.MutedRed,
+        yRangeMode: EYRangeMode.Visible
     });
 
     const realtimeSeries = new FastCandlestickRenderableSeries(wasmContext, {
@@ -207,6 +220,7 @@ export const initializeCandleStickChart = async (
         strokeUp: "#39FF14",   // Neon outline
         strokeDown: "#FF073A",
         strokeThickness: 2,
+        yRangeMode: EYRangeMode.Visible
     });
 
     const buyTakeProfitSeries = new FastLineRenderableSeries(wasmContext, {
@@ -224,14 +238,15 @@ export const initializeCandleStickChart = async (
     });
 
     sciChartSurface.renderableSeries.add(candlestickSeries);
-    sciChartSurface.renderableSeries.add(realtimeSeries);
-    sciChartSurface.renderableSeries.add(buyTakeProfitSeries);
-    sciChartSurface.renderableSeries.add(sellTakeProfitSeries);
-
-
+    //sciChartSurface.renderableSeries.add(realtimeSeries);
+    if (sim_type !== "RLSimulated") {
+        sciChartSurface.renderableSeries.add(buyTakeProfitSeries);
+        sciChartSurface.renderableSeries.add(sellTakeProfitSeries);
+    }
 
     // Add some moving averages using SciChart's filters/transforms API
     // when candleDataSeries updates, XyMovingAverageFilter automatically recomputes
+    /*
     sciChartSurface.renderableSeries.add(
         new FastLineRenderableSeries(wasmContext, {
             dataSeries: new XyMovingAverageFilter(candleDataSeries, {
@@ -251,7 +266,7 @@ export const initializeCandleStickChart = async (
             stroke: appTheme.VividPink,
         })
     );
-
+    */
 
     const cursorModifier = new CursorModifier({
         crosshairStroke: appTheme.MutedOrange,
