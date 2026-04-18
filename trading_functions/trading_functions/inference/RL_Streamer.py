@@ -8,13 +8,19 @@ from rl_functions.utils import add_momentum_and_velocity_short
 from trading_functions.db.models import PriceData
 from trading_functions.inference.inf_functions import (
     get_bulk_prediction,
-    get_prediction
+    get_prediction,
+    get_maximum_period
 )
 from trading_functions.common.indicators import calculate_ATR
 import logging
+import os
+
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
 
 class RL_Stream_Data:
     def __init__(self, db, symbol, inf_config, model_high_version, model_low_version, model_high_alias, simulation_mode=True, start_time: datetime=None, end_time: datetime=None, logger=None):
+        
         self.db = db
         self.symbol = symbol
         self.inf_config = inf_config
@@ -26,6 +32,7 @@ class RL_Stream_Data:
         self.start_time = start_time
         self.end_time = end_time
         self.logger = logger or logging.getLogger(__name__)
+        self.logger.debug("Debug mode is ON! in RLStreamer")
         self.logger.info(f"Initialized RL_Stream_Data with symbol: {self.symbol}, simulation_mode: {self.simulation_mode}, start_time: {self.start_time}, end_time: {self.end_time}")
         
         # 1. ONE-TIME SETUP: Load expensive artifacts
@@ -37,7 +44,9 @@ class RL_Stream_Data:
             high_alias=self.model_high_alias                                             
         )
         
-        self.rl_lookback = self.inf_config['rl']['max_period_lookback']
+        # self.rl_lookback = self.inf_config['rl']['max_period_lookback']
+        self.rl_lookback = get_maximum_period(self.training_config)  # This function checks all the periods used in indicators and slopes and returns the maximum one, so that we can look back that many rows in history to calculate all indicators/slopes on the fly for the new row
+        self.logger.info(f"Calculated rl_lookback (maximum period to look back for indicators/slopes): {self.rl_lookback}")
         self.slope_windows = [3, 9, 39, 99]
         self.clip_num = - self.rl_lookback - max(self.slope_windows) + 1 # We need at least this many rows to calculate all slopes/errors for the new row
         self.last_ts = None
@@ -46,6 +55,10 @@ class RL_Stream_Data:
         # We need at least max(slope_windows) + ATR period rows
         self.history_buffer = pd.DataFrame()
         self.rl_data_buffer = pd.DataFrame() # This will store the processed data with indicators for the current day, which we will use to feed into the model for predictions. We keep this separate from history_buffer which is raw price data, so that we don't have to recalculate indicators for the entire history every time.
+
+        # Initialize the variables to calculate the progress for the day
+        self.day_total_bars = 0.0
+        self.day_current_idx = 0
 
     def _prepare_day_initial_state(self):
         """
@@ -69,6 +82,7 @@ class RL_Stream_Data:
             raise ValueError(f"No historical data found for symbol {self.symbol} before {self.current_day}, so cannot initialize streamer. Run for a day where previous day data exists.")
 
         prev_date = prev_date_entry.time.date()
+        self.logger.info(f"Previous date entry found: {prev_date}")
 
         start_prev = datetime.combine(prev_date, time(0, 0))
         end_prev = start_prev + timedelta(days=1)
@@ -115,6 +129,16 @@ class RL_Stream_Data:
             self.logger.debug(f"clip_num: {self.clip_num}, history_buffer shape: {self.history_buffer.shape}, rl_data_buffer shape: {self.rl_data_buffer.shape}")
 
             self._add_observations()
+
+            ### Setting the total bars for the day for progress tracking. We will update this after streaming starts as well, in case we started streaming before the market opened and there are no bars for the current day at the time of initialization, but bars start coming in later when market opens.
+            current_day_rows_count = self.db.query(PriceData).filter(
+                PriceData.symbol == self.symbol,
+                PriceData.time >= datetime.combine(self.current_day, time(0, 0)),
+                PriceData.time < datetime.combine(self.current_day + timedelta(days=1), time(0, 0))
+            ).count()
+            self.day_total_bars = current_day_rows_count
+            self.day_current_idx = 0
+            self.logger.info(f"Initial day_total_bars: {self.day_total_bars}")
             
         else:
             if self.simulation_mode:
@@ -148,6 +172,7 @@ class RL_Stream_Data:
             start_idx = max(self.slope_windows)-1  # We need at least max(slope_windows) data points to calculate the slopes
      
         self.logger.debug(f" Start idx : {start_idx}")
+        self.logger.debug(f"rl_data_buffer shape before adding observations: {self.rl_data_buffer.shape}")
         for idx in range(start_idx, len(self.rl_data_buffer)):
             #print(f"Processing row {idx+1} of {len(df)}")
             current_row = self.rl_data_buffer.iloc[idx]
@@ -277,7 +302,14 @@ class RL_Stream_Data:
                         scalers=self.scalers,
                     )
                     self._add_rl_observations_for_new_row(preds)
-                    yield self.rl_data_buffer.iloc[-1]
+
+                    yielded_row = self.rl_data_buffer.iloc[-1].copy()
+                    self.day_current_idx += 1
+                    progress = self.day_current_idx / self.day_total_bars if self.day_total_bars else 0.0
+                    yielded_row['step_progress'] = progress
+
+                    yield yielded_row
+
                     self.last_ts = next_ts
                 else:
                     print("No more data available in simulation. Ending stream.")

@@ -36,6 +36,10 @@ import time
 import logging
 import math
 from app.methods.schwab_methods import get_time_field
+
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
+
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -152,6 +156,7 @@ def get_artifacts_for_model_inference_RL(session_record: TradeSession, db: Sessi
     vec_env = VecNormalize.load(vec_norm_local_path, vec_env)
     vec_env.training = False
     vec_env.norm_obs = True
+    vec_env.clip_obs = 10.0
 
     model.set_env(vec_env)
     
@@ -398,7 +403,9 @@ async def websocket_simulation_rl(
         is_live_mode = False
         current_day = None
         while True:
+            
             action, _ = rl_model.predict(obs, deterministic=True)
+            logger.info(f"Predicted actions: {action}")
             action_int = int(action[0])
             current_ts = raw_env.last_timestamp
 
@@ -423,6 +430,7 @@ async def websocket_simulation_rl(
                     logger.info(f"Not switching to live mode even though current timestamp has reached or passed the session start time because there is an active trade. Current timestamp: {current_ts}, Session start time: {start_time}")
 
             if is_live_mode:
+                await asyncio.sleep(0.1)
                 current_candle = db.query(PriceData).filter(
                     PriceData.symbol == session_record.symbol,
                     PriceData.time == current_ts

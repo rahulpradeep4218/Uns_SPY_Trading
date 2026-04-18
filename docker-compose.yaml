@@ -157,6 +157,7 @@ services:
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT}
       SERVICE_MODE: api
+      LOG_LEVEL: INFO
     networks:
       - app_network
     volumes:

@@ -1,3 +1,5 @@
+from torch import seed
+
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -47,8 +49,15 @@ class TradingEnv(gym.Env):
         # Actions
         self.action_space = spaces.Discrete(4)  # Buy Call, Buy Put, Hold, Sell
 
-        # Placeholder for observation space, will be defined in reset
-        self.observation_space = None
+        agent_state_dim = 4
+        obs_dim = len(self.obs_features) + agent_state_dim
+        self.observation_space = spaces.Box(
+            low=-10.0, 
+            high=10.0, 
+            shape=(obs_dim,), 
+            dtype=np.float32
+        )
+
         if self.logger:
             self.logger.info(f"Initializing TradingEnv for symbol: {self.symbol}, start_date: {self.start_date}, end_date: {self.end_date}, evaluation: {self.evaluation}")
         
@@ -98,15 +107,6 @@ class TradingEnv(gym.Env):
         # 3 time_in_trade_norm,
         # 4 distance_to_stop_norm,
         # 5 current_step
-        agent_state_dim = 4
-        obs_dim = len(self.obs_features) + agent_state_dim
-        self.observation_space = spaces.Box(
-            low=-10.0, 
-            high=10.0, 
-            shape=(obs_dim,), 
-            dtype=np.float32
-        )
-        
 
         # Trading state
         self.no_trades_completed = 0
@@ -387,6 +387,8 @@ class LiveTradingEnv(TradingEnv):
         self.current_row = None
         self.last_timestamp = None
         self.streamer = streamer
+        self.obs_features = obs_features
+        self.progress = 0.0
         # We pass dummy dates because the streamer controls the timeline
         super().__init__(
             db=db, 
@@ -397,9 +399,7 @@ class LiveTradingEnv(TradingEnv):
             evaluation=True, 
             **kwargs
         )
-        
-        
-        
+             
         if self.logger:
             self.logger.info("LiveTradingEnv initialized and ready for streaming.")
 
@@ -408,17 +408,22 @@ class LiveTradingEnv(TradingEnv):
         Resets the environment state and restarts the data stream.
         """
 
+        # Initialize the Gymnasium seed logic without triggering the parent's data loading
+        gym.Env.reset(self, seed=seed)
+        
         self.stream_gen = self.streamer.stream()
+        self.logger.info("LiveTradingEnv reset: Stream generator initialized.")
 
         # Pull the first row to initialize the observation space
         try:
             self.current_row = next(self.stream_gen)
+            self.progress = self.current_row['step_progress'] if 'step_progress' in self.current_row else 0.0
+            self.logger.info(f"LiveTradingEnv reset, progress : {self.progress:.4f}")
+            self.logger.info(f"First streamed row received with row: {self.current_row}")
+            self.logger.info(f"Columns in streamed row: {self.current_row.index.tolist()}")
             self.last_timestamp = self.current_row['Date']
         except StopIteration:
             raise RuntimeError("Streamer yielded no data during reset.")
-        
-        # Call Gymnasium's base reset for seeding
-        obs, info = super().reset(seed=seed, options=options)
         
         # Reset internal trading metrics
         self.pnl = 0.0
@@ -443,10 +448,15 @@ class LiveTradingEnv(TradingEnv):
         self.xg_high = 0.0
         self.xg_low = 0.0
 
+        # # Call Gymnasium's base reset for seeding
+        # obs, info = super().reset(seed=seed, options=options)
+
         # Initialize the Streamer Generator
 
- 
+        obs = self._get_observation()
+
         info = {"timestamp": self.last_timestamp}
+        
         return obs, info
 
     def _get_observation(self):
@@ -455,6 +465,7 @@ class LiveTradingEnv(TradingEnv):
         and the real-time agent state.
         """
         # 1. Extract Market Features from the streamed row
+        #self.logger.info(f"Building observation from streamed row : {self.current_row}")
         market_obs = np.array(
             [self.current_row[f] for f in self.obs_features], 
             dtype=np.float32
@@ -467,15 +478,16 @@ class LiveTradingEnv(TradingEnv):
         loss_ratio = total_pnl / self.max_episode_loss if self.max_episode_loss != 0 else 0.0
         loss_ratio = np.clip(loss_ratio, -1.0, 1.0)
         
-        # In live mode, 'progress' is less certain; we use a dummy or a session-time based norm
-        progress = 0.0 
-        
         agent_obs = [
-            float(self.active_trade),
-            float(self.active_trade_direction),
-            progress,
+            self.active_trade,
+            self.active_trade_direction,
+            self.progress,
             loss_ratio
         ]
+        self.logger.info(f"Market obs shape: {market_obs.shape}")
+        market_str = np.array2string(market_obs, precision=4, separator=',')
+        self.logger.info(f"Complete market obs: {market_str}")
+        self.logger.info(f"Market Obs: {market_obs}, Agent Obs: {agent_obs}")
 
         # 3. Concatenate
         obs = np.concatenate([market_obs, np.array(agent_obs, dtype=np.float32)])
@@ -567,6 +579,7 @@ class LiveTradingEnv(TradingEnv):
         # --- 4. Get Next Row from Streamer ---
         try:
             self.current_row = next(self.stream_gen)
+            self.progress = self.current_row['step_progress'] if 'step_progress' in self.current_row else self.progress
             self.pred_high = self.current_row['pred_high']
             self.pred_low = self.current_row['pred_low']
             self.current_step += 1

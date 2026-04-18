@@ -80,7 +80,7 @@ services:
     image: mlflow_tracking_image
 
     environment:
-      MLFLOW_TRACKING_URI: http://mlflow:${MLFLOW_PORT}
+      MLFLOW_TRACKING_URI: http://localhost:${MLFLOW_PORT}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_PORT: ${POSTGRES_PORT}
