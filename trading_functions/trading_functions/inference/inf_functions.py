@@ -298,7 +298,7 @@ def get_prediction_row(data, model_high, model_low, training_config, scalers):
     #print(f"Shape : {data.shape}")
     #print(data)
     data = transform_for_inference(data=data, config=training_config, scalers=scalers)
-    data_lastrow = data.iloc[[-1]]
+    data_lastrow = data.iloc[[-1]].copy()
     all_features = get_all_training_features(training_config)
     current_close = data_lastrow['Close'].values[0]
     features_row = data_lastrow[all_features]

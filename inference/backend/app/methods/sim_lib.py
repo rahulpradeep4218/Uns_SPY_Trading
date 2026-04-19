@@ -395,7 +395,8 @@ async def check_trade_exit_rl(
     if trade.profit + day_profit < -daily_loss_limit:
         close_trade = True
         status_update = "DAILY_LOSS_LIMIT"
-    elif current_candle.time.hour >= 15 and current_candle.time.minute >= 40 and sim_options.close_at_eod:
+    #elif current_candle.time.hour >= 15 and current_candle.time.minute >= 40 and sim_options.close_at_eod:
+    elif current_candle.time.hour >= 15 and current_candle.time.minute >= 40:
         close_trade = True
         status_update = "END_OF_DAY"
     elif current_signal == 3:

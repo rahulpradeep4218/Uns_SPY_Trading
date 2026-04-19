@@ -22,7 +22,7 @@ class TradingEnv(gym.Env):
 
     """
 
-    def __init__(self, db, symbol, start_date, end_date, initial_balance=10000, trade_fee=0.5, max_trade_loss_percent=2.0, obs_features=None, price_multiplier=10, evaluation=False, logger=None):
+    def __init__(self, db, symbol, start_date, end_date, initial_balance=10000, trade_fee=0.5, max_trade_loss_percent=2.0, obs_features=None, price_multiplier=10, evaluation=True, logger=None):
         super().__init__()
         # Storing the data
         self.obs_features = obs_features
@@ -158,30 +158,100 @@ class TradingEnv(gym.Env):
             dtype=np.float32
         )
 
-    def calculate_final_reward(self, final_pnl, duration_steps):
-        base_reward = (np.sign(final_pnl) * (final_pnl ** 2)) / 100.0
+    # def calculate_final_reward(self, final_pnl, duration_steps):
+    #     base_reward = (np.sign(final_pnl) * (final_pnl ** 2)) / 100.0
 
-        day_progress = self.current_step / self.max_steps if self.max_steps > 0 else 0.0
+    #     day_progress = self.current_step / self.max_steps if self.max_steps > 0 else 0.0
 
-        MAX_HOLD = 15.0
+    #     MAX_HOLD = 15.0
 
-        decay_weight = 1.0 - (day_progress ** 2)
-        # Patience multiplier
-        time_mult = 1.0 + ( min(duration_steps, MAX_HOLD) * 0.07 * decay_weight )
+    #     decay_weight = 1.0 - (day_progress ** 2)
+    #     # Patience multiplier
+    #     time_mult = 1.0 + ( min(duration_steps, MAX_HOLD) * 0.07 * decay_weight )
 
-        #Sortino penalty
-        history = np.array(self.pnl_history)
-        downside = history[history < 0]
-        downside_penalty = np.mean(downside**2) if len(downside) > 0 else 0.0
+    #     #Sortino penalty
+    #     history = np.array(self.pnl_history)
+    #     downside = history[history < 0]
+    #     downside_penalty = np.mean(downside**2) if len(downside) > 0 else 0.0
 
-        # Final calculation
-        if final_pnl > 0:
-            reward = (base_reward * time_mult) - (0.03 * downside_penalty)
+    #     # Final calculation
+    #     if final_pnl > 0:
+    #         reward = (base_reward * time_mult) - (0.03 * downside_penalty)
+    #     else:
+    #         loss_penalty = 1.0 + day_progress
+    #         reward = (base_reward * loss_penalty) - (0.05 * downside_penalty)
+
+    #     return reward
+
+
+    def calculate_final_reward(self, trade_pnl, duration_steps):
+        """
+        Terminal reward designed for options trading where:
+        - Steps are assumed to be 1-minute bars
+        - Ideal hold duration is 10-20 steps (minutes)
+        - Too short (<5 min): likely noise, small bonus reduction
+        - Sweet spot (10-20 min): full reward
+        - Too long (>30 min): theta decay penalty grows, capped so agent still closes
+        
+        Completely independent of total_intermediate_given (no debt).
+        """
+
+        # --- 1. Normalise PnL so reward is scale-independent ---
+        # +1.0 means you earned the entire max-loss budget back as profit
+        # -1.0 means you hit max loss
+        normalised_pnl = np.clip(
+            trade_pnl / self.max_episode_loss,
+            -1.0, 1.0
+        )
+
+        # --- 2. Duration multiplier: bell-curve peaking at sweet spot ---
+        SWEET_SPOT_MIN = 10   # steps (minutes) — start of ideal window
+        SWEET_SPOT_MAX = 20   # steps (minutes) — end of ideal window
+        TOO_SHORT      = 5    # below this: penalise (likely noise trade)
+        TOO_LONG       = 45   # above this: hard theta decay ceiling
+
+        if duration_steps < TOO_SHORT:
+            # Ramp up from 0.5 to 1.0 between 0 and TOO_SHORT
+            duration_mult = 0.5 + 0.5 * (duration_steps / TOO_SHORT)
+
+        elif duration_steps <= SWEET_SPOT_MIN:
+            # Ramp from 1.0 to 1.3 between TOO_SHORT and SWEET_SPOT_MIN
+            ramp = (duration_steps - TOO_SHORT) / (SWEET_SPOT_MIN - TOO_SHORT)
+            duration_mult = 1.0 + 0.3 * ramp
+
+        elif duration_steps <= SWEET_SPOT_MAX:
+            # Flat peak in the ideal window
+            duration_mult = 1.3
+
+        elif duration_steps <= TOO_LONG:
+            # Decay from 1.3 back to 1.0 between SWEET_SPOT_MAX and TOO_LONG
+            decay = (duration_steps - SWEET_SPOT_MAX) / (TOO_LONG - SWEET_SPOT_MAX)
+            duration_mult = 1.3 - 0.3 * decay
+
         else:
-            loss_penalty = 1.0 + day_progress
-            reward = (base_reward * loss_penalty) - (0.05 * downside_penalty)
+            # Beyond TOO_LONG: theta decay penalty, floor at 0.5 so agent still closes
+            # rather than holding forever hoping for a miracle
+            overhang = duration_steps - TOO_LONG
+            duration_mult = max(0.5, 1.0 - 0.01 * overhang)
 
-        return reward
+        # --- 3. Day-progress urgency: force close near end of session ---
+        day_progress = self.current_step / self.max_steps if self.max_steps > 0 else 0.0
+        # Linearly ramps from 1.0 at open to 1.5 at close
+        # Encourages agent to close open positions as session end approaches
+        eod_urgency = 1.0 + 0.5 * (day_progress ** 2)
+
+        # --- 4. Combine ---
+        if trade_pnl > 0:
+            # Winning trade: full duration bonus applies
+            reward = normalised_pnl * duration_mult
+
+        else:
+            # Losing trade: duration_mult still applies so agent learns
+            # that a quick small loss is better than a long large loss.
+            # Cap at -1.0 so it never feels catastrophic.
+            reward = max(normalised_pnl * duration_mult * eod_urgency, -1.0)
+
+        return float(reward)
 
 
     def _get_observation(self):
@@ -417,7 +487,8 @@ class LiveTradingEnv(TradingEnv):
         # Pull the first row to initialize the observation space
         try:
             self.current_row = next(self.stream_gen)
-            self.progress = self.current_row['step_progress'] if 'step_progress' in self.current_row else 0.0
+            #self.progress = self.current_row['step_progress'] if 'step_progress' in self.current_row else 0.0
+            self.progress = 0.0
             self.logger.info(f"LiveTradingEnv reset, progress : {self.progress:.4f}")
             self.logger.info(f"First streamed row received with row: {self.current_row}")
             self.logger.info(f"Columns in streamed row: {self.current_row.index.tolist()}")
@@ -447,6 +518,7 @@ class LiveTradingEnv(TradingEnv):
         self.pnl_list = [0.0]
         self.xg_high = 0.0
         self.xg_low = 0.0
+        self.max_steps = 390
 
         # # Call Gymnasium's base reset for seeding
         # obs, info = super().reset(seed=seed, options=options)
@@ -477,7 +549,7 @@ class LiveTradingEnv(TradingEnv):
         # Normalize the loss ratio relative to the stop-out limit
         loss_ratio = total_pnl / self.max_episode_loss if self.max_episode_loss != 0 else 0.0
         loss_ratio = np.clip(loss_ratio, -1.0, 1.0)
-        
+        loss_ratio = float(loss_ratio)
         agent_obs = [
             self.active_trade,
             self.active_trade_direction,
@@ -497,6 +569,32 @@ class LiveTradingEnv(TradingEnv):
             self.logger.warning(f"NaN in Live Observation at {self.last_timestamp}")
             
         return obs
+
+    def calculate_final_reward(self, final_pnl, duration_steps):
+        base_reward = (np.sign(final_pnl) * (final_pnl ** 2)) / 100.0
+
+        day_progress = self.progress
+
+        MAX_HOLD = 15.0
+
+        decay_weight = 1.0 - (day_progress ** 2)
+        # Patience multiplier
+        time_mult = 1.0 + ( min(duration_steps, MAX_HOLD) * 0.07 * decay_weight )
+
+        #Sortino penalty
+        history = np.array(self.pnl_history)
+        downside = history[history < 0]
+        downside_penalty = np.mean(downside**2) if len(downside) > 0 else 0.0
+
+        # Final calculation
+        if final_pnl > 0:
+            reward = (base_reward * time_mult) - (0.03 * downside_penalty)
+        else:
+            loss_penalty = 1.0 + day_progress
+            reward = (base_reward * loss_penalty) - (0.05 * downside_penalty)
+
+        return reward
+
 
     def step(self, action):
         """
@@ -535,6 +633,7 @@ class LiveTradingEnv(TradingEnv):
             trade_profit -= self.trade_fee # Apply fee on exit as well
             
             self.pnl += trade_profit
+            self.logger.info(f"Trade closed at {self.last_timestamp} with profit: {trade_profit:.2f}, total pnl: {self.pnl:.2f}")
             
             # Statistics
             if trade_profit > 0: self.winning_trades += 1
@@ -587,6 +686,22 @@ class LiveTradingEnv(TradingEnv):
             # Stream ended (end of simulation or market close)
             truncated = True
         
+        if not truncated:
+            current_ts = self.current_row['Date']
+            if current_ts.date() != self.last_timestamp.date():
+                self.logger.info("Next day loaded in LiveTradingEnv with timestamp : {}".format(current_ts))
+                self.current_step = 0
+                self.max_steps = 390
+                if self.active_trade:
+                    self.no_trades_completed += 1
+                    trade_profit = (price - self.active_trade_entry_price) * self.active_trade_direction * self.price_multiplier
+                    self.pnl = 0.0
+                    self.peak_balance = 0.0
+                    self.active_pnl = 0.0
+                    self.active_trade = False
+                    self.active_trade_direction = 0
+                    self.active_trade_entry_price = 0.0
+                    self.active_trade_duration = 0
 
         info = {
             "total_pnl": total_pnl,

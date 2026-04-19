@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import { TradeRecord } from '@/app/types';
-import { usePageContext } from '@/context/PageContext';
+import { usePageContext  } from '@/context/PageContext';
 
 export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
     const { selected_session } = usePageContext();
@@ -16,6 +16,8 @@ export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info'>('info');
 
+    const { sim_type } = usePageContext(); // Get sim_type from context if needed for conditional logic
+    
     const handleOpenSnackbar = (message: string, status: string) => {
         setSnackbarMessage(message);
         setSnackbarSeverity(status.toLowerCase() === 'success' ? 'success' :
@@ -30,6 +32,7 @@ export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
 
     const handlePlaceOrder = async (trade: TradeRecord) => {
         setLoading(true);
+        
         try {
             console.log("Placing Schwab order:", `${process.env.NEXT_PUBLIC_INF_URL}/api/schwab/add-schwab-order?session_id=${selected_session}&trade_time=${trade.trade_time}`);
             const res = await fetch(
@@ -107,9 +110,9 @@ export const TradeTable = ({ trades }: { trades: TradeRecord[] }) => {
                                 <TableCell>
                                     <Typography variant="body2"
                                         color={trade.signal === 1 ? 'success.main' :
-                                            trade.signal === -1 ? 'error.main' : 'text.secondary'}>
+                                            trade.signal === (sim_type === 'RLSimulated' ? 2 : -1) ? 'error.main' : 'text.secondary'}>
                                         {trade.signal === 1 ? 'Buy' :
-                                            trade.signal === -1 ? 'Sell' : 'None'}
+                                            trade.signal === (sim_type === 'RLSimulated' ? 2 : -1) ? 'Sell' : 'None'}
                                     </Typography>
                                 </TableCell>
                                 <TableCell>
