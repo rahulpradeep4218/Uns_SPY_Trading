@@ -9,6 +9,7 @@ from trading_functions.db.models import PriceData
 from trading_functions.inference.inf_functions import (
     get_bulk_prediction,
     get_prediction,
+    get_prediction_row,
     get_maximum_period
 )
 from trading_functions.common.indicators import calculate_ATR
@@ -56,6 +57,9 @@ class RL_Stream_Data:
         self.history_buffer = pd.DataFrame()
         self.rl_data_buffer = pd.DataFrame() # This will store the processed data with indicators for the current day, which we will use to feed into the model for predictions. We keep this separate from history_buffer which is raw price data, so that we don't have to recalculate indicators for the entire history every time.
 
+        ### For storing just ohlc data
+        self.ohlc_history_buffer = pd.DataFrame()
+
         # Initialize the variables to calculate the progress for the day
         self.day_total_bars = 0.0
         self.day_current_idx = 0
@@ -67,7 +71,7 @@ class RL_Stream_Data:
         This requires atleast 1 bar in current day to calculate the gap between the last bar of previous day
         and the current day`s 1st bar. we then use this gap to adjust the prev days values.
         """
-        print("Warming up current day history buffer...")
+        self.logger.info("Warming up current day history buffer...")
     
         prev_date_entry = (
             self.db.query(PriceData.time)
@@ -102,6 +106,8 @@ class RL_Stream_Data:
             'Volume': entry.volume,
         } for entry in prev_day_query[self.clip_num:]]  # last rl_lookback_period rows
         self.last_ts = prev_day_rows[-1]['Date'] if prev_day_rows else None
+
+        self.logger.info(f"Loaded {len(prev_day_rows)} rows for previous day {prev_date} into history buffer. Last timestamp in previous day data: {self.last_ts}")
         current_day_1st_row_query = self.db.query(PriceData).filter(
             PriceData.symbol == self.symbol,
             PriceData.time >= datetime.combine(self.current_day, time(0, 0))
@@ -116,20 +122,24 @@ class RL_Stream_Data:
                 'Volume': current_day_1st_row_query.volume,
             }]
             gap = current_day_rows[0]['Open'] - prev_day_rows[-1]['Close']
-            self.history_buffer = pd.DataFrame(prev_day_rows)
-            self.history_buffer[['Open', 'High', 'Low', 'Close']] += gap
+            self.rl_data_buffer = pd.DataFrame(prev_day_rows)
+            self.rl_data_buffer[['Open', 'High', 'Low', 'Close']] += gap
+            self.ohlc_history_buffer = self.rl_data_buffer.copy()  # This buffer will only have ohlc data for calculating indicators like ATR without the need to keep all the indicator columns that rl_data_buffer has, which we need to recalculate for the new rows during streaming
             self.rl_data_buffer = get_bulk_prediction(
-                data=self.history_buffer,
+                data=self.rl_data_buffer,
                 model_high=self.xg_model_high,
                 model_low=self.xg_model_low,
                 training_config=self.training_config,
                 scalers=self.scalers,
             )
             self.rl_data_buffer.reset_index(drop=True, inplace=True)
-            self.logger.debug(f"clip_num: {self.clip_num}, history_buffer shape: {self.history_buffer.shape}, rl_data_buffer shape: {self.rl_data_buffer.shape}")
+            
+            self.history_buffer = self.rl_data_buffer.copy()  # We will use this history buffer to calculate indicators/slopes on the fly for the new rows coming in during streaming, so it needs to have all the same columns as rl_data_buffer which has the indicators as well, not just raw price data
 
+            ### Adds RL observations (slopes, pred errors etc) to the initial buffer for the current day, so that we have the same state representation for the first row of the current day when we start streaming as well, and we don't have to do any special handling for the first row of the current day when we start streaming
             self._add_observations()
 
+            self.logger.info(f"clip_num: {self.clip_num}, history_buffer shape: {self.history_buffer.shape}, rl_data_buffer shape: {self.rl_data_buffer.shape}")
             ### Setting the total bars for the day for progress tracking. We will update this after streaming starts as well, in case we started streaming before the market opened and there are no bars for the current day at the time of initialization, but bars start coming in later when market opens.
             current_day_rows_count = self.db.query(PriceData).filter(
                 PriceData.symbol == self.symbol,
@@ -223,12 +233,10 @@ class RL_Stream_Data:
         self.rl_data_buffer = calculate_ATR(self.rl_data_buffer, self.inf_config['indicators']['parameters'], column='Close')
 
 
-    def _add_rl_observations_for_new_row(self, preds):
+    def _add_rl_observations_for_new_row(self, new_row):
         """ Adds rl data and observations to the rl_data_buffer from history buffer latest row"""
-        new_row = self.history_buffer.iloc[-1:].copy()
 
-        new_row['pred_high'] = preds['buy_take']
-        new_row['pred_low'] = preds['sell_take']
+        self.history_buffer = pd.concat([self.history_buffer, new_row], ignore_index=True)
         self.rl_data_buffer = pd.concat([self.rl_data_buffer, new_row], ignore_index=True)
         self._add_observations(n=1)  # Only calculate observations for the new row
 
@@ -292,16 +300,16 @@ class RL_Stream_Data:
                         'Close': next_row_entry.close,
                         'Volume': next_row_entry.volume,
                     }])
-                    self.history_buffer = pd.concat([self.history_buffer, next_row_df], ignore_index=True)
-                    self.history_buffer = self.history_buffer.iloc[self.clip_num:]
-                    preds = get_prediction(
-                        data=self.history_buffer,
+                    self.ohlc_history_buffer = pd.concat([self.ohlc_history_buffer, next_row_df], ignore_index=True)
+
+                    pred_row = get_prediction_row(
+                        data=self.ohlc_history_buffer,  # We only need ohlc data to calculate indicators on the fly for the new row, which is what we have in this buffer, so we can pass this buffer to get_prediction instead of the entire history buffer which has a lot of extra columns that we don't need and would just slow down the prediction
                         model_high=self.xg_model_high,
                         model_low=self.xg_model_low,
                         training_config=self.training_config,
                         scalers=self.scalers,
                     )
-                    self._add_rl_observations_for_new_row(preds)
+                    self._add_rl_observations_for_new_row(pred_row)
 
                     yielded_row = self.rl_data_buffer.iloc[-1].copy()
                     self.day_current_idx += 1

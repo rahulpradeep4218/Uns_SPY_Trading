@@ -287,6 +287,65 @@ def get_prediction(data, model_high, model_low, training_config, scalers):
     }
 
 
+
+def get_prediction_row(data, model_high, model_low, training_config, scalers):
+    """
+    Get prediction along with the features as a complete row from the high and low models.
+    """
+    max_period = get_maximum_period(training_config)
+    # Filter last max period rows
+    data = data.tail(max_period+1)
+    #print(f"Shape : {data.shape}")
+    #print(data)
+    data = transform_for_inference(data=data, config=training_config, scalers=scalers)
+    data_lastrow = data.iloc[[-1]]
+    all_features = get_all_training_features(training_config)
+    current_close = data_lastrow['Close'].values[0]
+    features_row = data_lastrow[all_features]
+    buy_vals = model_high.predict(features_row)
+    sell_vals = model_low.predict(features_row)
+
+    low_label_index = -1
+    high_label_index = -2
+
+    # buy_take, sell_take = buy_vals[0][0], sell_vals[0][0]
+    # buy_stop, sell_stop = sell_vals[0][1], buy_vals[0][1]
+    buy_take, sell_take = buy_vals[0], sell_vals[0]
+    label_scaling_multiplier = training_config['common_config']['label_scaling_multiplier']
+    label_scale = training_config['common_config']['label_scale']
+
+    # buy_take = buy_take * current_close / label_scaling_multiplier
+    # buy_take = buy_take + current_close
+
+    # sell_take = sell_take * current_close / label_scaling_multiplier
+    # sell_take = current_close - sell_take
+
+    # buy_stop = buy_stop * current_close / label_scaling_multiplier
+    # buy_stop = current_close - buy_stop
+
+    # sell_stop = sell_stop * current_close / label_scaling_multiplier
+    # sell_stop = sell_stop + current_close
+
+    if label_scale == 'standard':
+        buy_take = buy_take * scalers[label_scale].scale_[high_label_index] + scalers[label_scale].mean_[high_label_index]
+        sell_take = sell_take * scalers[label_scale].scale_[low_label_index] + scalers[label_scale].mean_[low_label_index]
+
+    elif label_scale == 'robust':
+        buy_take = buy_take * scalers[label_scale].scale_[high_label_index] + scalers[label_scale].center_[high_label_index]
+        sell_take = sell_take * scalers[label_scale].scale_[low_label_index] + scalers[label_scale].center_[low_label_index]
+
+    buy_take = ( buy_take * current_close ) + current_close
+    sell_take = current_close - ( sell_take * current_close )
+
+    buy_stop = sell_take
+    sell_stop = buy_take
+
+    data_lastrow['pred_high'] = buy_take
+    data_lastrow['pred_low'] = sell_take
+
+    return data_lastrow
+
+
 def get_bulk_prediction(data, model_high, model_low, training_config, scalers):
     """
     Get predictions from the high and low models for all rows in the data.
