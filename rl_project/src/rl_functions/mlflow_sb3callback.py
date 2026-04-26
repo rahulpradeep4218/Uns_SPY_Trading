@@ -3,6 +3,7 @@ import mlflow
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
+from sb3_contrib.common.maskable.utils import get_action_masks
 from sqlalchemy.orm import Session
 from rl_functions.pnl_metrics import PnLMetrics
 
@@ -148,7 +149,7 @@ class MLflowRLCallback(BaseCallback):
 
         # Load normalization stats from this checkpoint
         eval_env = VecNormalize.load(vec_path, eval_env)
-
+        eval_env.norm_obs_keys = ["continuous"]
         # Freeze normalization
         eval_env.training = False
         eval_env.norm_reward = False
@@ -160,7 +161,8 @@ class MLflowRLCallback(BaseCallback):
         total_reward = 0
         eval_pnl_list = [0.0]
         while not done:
-            action, _ = self.model.predict(obs, deterministic=True)
+            action_masks = get_action_masks(eval_env)
+            action, _ = self.model.predict(obs, deterministic=True, action_masks=action_masks)
             obs, reward, dones, infos = eval_env.step(action)
             done = dones[0]
             total_reward += reward[0]

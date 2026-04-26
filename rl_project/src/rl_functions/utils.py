@@ -2,6 +2,8 @@ import random
 import datetime
 from datetime import timedelta
 from stable_baselines3 import PPO
+from sb3_contrib import MaskablePPO
+from sb3_contrib.common.maskable.utils import get_action_masks
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 # from rl_functions.trading_env import TradingEnv
@@ -262,9 +264,9 @@ def get_env(config: dict, db: Session, eval_mode: bool=False, dagster_logger=Non
                           max_trade_loss_percent=max_trade_loss_percent,
                           obs_features=obs_features,
                           price_multiplier=price_multiplier,
-                            evaluation=eval_mode,
-                            logger=dagster_logger
-                          )
+                          evaluation=eval_mode,
+                          logger=dagster_logger
+                    )
     
     return DummyVecEnv([make_env])
    
@@ -453,12 +455,13 @@ def get_data(symbol: str, start_date: datetime.datetime, end_date: datetime.date
         df.at[idx, 'pred_low_error'] = pred_low_error
 
     df = add_momentum_and_velocity_short(df, period=14)
+
+    df = calculate_ATR(df, inf_config['indicators']['parameters'], column='Close')
+
     # After all calculations, keep only the current day's records (exclude prev_day_rows)
     if prev_day_rows:
         df = df.iloc[start_idx+1:].reset_index(drop=True)
-    # print("Final df after removing prev rows")
-    # print(df.head())
-    df = calculate_ATR(df, inf_config['indicators']['parameters'], column='Close')
+
 
     return df, "OK"
 
@@ -578,9 +581,9 @@ def get_latest_model_checkpoint_folder(run_id: str):
 
 def load_checkpoint(run_id: str, env, config: dict, db: Session):
     model_path, vec_path = download_rl_mlflow_latest_version_artifact(config, db, run_id)
-    model = PPO.load(model_path, env=env)
-    env = VecNormalize.load(vec_path, env=env)
-
+    model = MaskablePPO.load(model_path, env=env)
+    env = VecNormalize.load(vec_path, venv=env)
+    env.norm_obs_keys = ["continuous"]
     return model, env
 
 
@@ -630,7 +633,6 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
     dagster_context.log.info(f"Checkpoints will be saved to: {checkpoints_local_path}")
     run_id = get_latest_run_id_using_tag(model_name=config['rl']['model_name'])
 
-
     env = get_env(config=config, db=db, eval_mode=False, dagster_logger=dagster_context.log)
     cyclic_update = config['rl']['cyclic_entropy_update_freq']
     total_timesteps = config['rl']['total_timesteps']
@@ -652,7 +654,7 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
                                                                           run_id=run_id,
                                                                           model_metadata=model_metadata
                                                                          )
-            model = PPO.load(model_path, 
+            model = MaskablePPO.load(model_path, 
                             env=env, 
                         )
 
@@ -669,10 +671,10 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
         latest_timestep = 0
         mlflow.start_run(run_name=f"RL_Training_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}", tags={"model_name": config['rl']['model_name'], "status": "IN_PROGRESS"})
         run_id = mlflow.active_run().info.run_id
-        policy_kwargs = dict(net_arch=[128, 128])
-        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.)
-        model = PPO(
-            policy='MlpPolicy',
+        policy_kwargs = dict(net_arch=[256, 256])
+        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10., norm_obs_keys=["continuous"])
+        model = MaskablePPO(
+            policy='MultiInputPolicy',
             env=env,
             learning_rate=3e-4,
             n_steps=2048,
@@ -699,7 +701,8 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
     )
     model.learn(total_timesteps=remaining_timesteps, 
                 reset_num_timesteps=False,
-                callback=mlflow_callback
+                callback=mlflow_callback,
+                use_masking=True
     )
     mlflow.set_tag("status", "Done")
     db.close()

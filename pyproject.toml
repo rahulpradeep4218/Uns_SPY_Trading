@@ -15,6 +15,7 @@ python = ">=3.11,<3.12"
 
 # Streamlit UI
 stable-baselines3 = "^2.7.1"
+sb3-contrib = "2.7.1"
 gymnasium = "^1.2.3"
 trading-functions = {path = "trading_functions", develop = true}
 rl-functions = {path = "rl_project", develop = true}
