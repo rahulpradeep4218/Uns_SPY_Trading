@@ -119,6 +119,8 @@ class TradingEnv(gym.Env):
 
         self.pnl_list = [0.0]
 
+        self.MIN_HOLD_STEPS = 5
+
         info = {}
 
         return self._get_observation(), info
@@ -162,7 +164,9 @@ class TradingEnv(gym.Env):
         """
         if self.active_trade:
             # Can only hold or close
-            return np.array([True, False, False, True], dtype=bool)
+            # Lock out close action until minimum hold period is reached
+            can_close = self.active_trade_duration >= self.MIN_HOLD_STEPS
+            return np.array([True, False, False, can_close], dtype=bool)
         else:
             # Can hold, buy call, or buy put — cannot close nothing
             return np.array([True, True, True, False], dtype=bool)
@@ -196,7 +200,7 @@ class TradingEnv(gym.Env):
 
         if duration_steps < TOO_SHORT:
             # Ramp up from 0.5 to 1.0 between 0 and TOO_SHORT
-            duration_mult = 0.5 + 0.5 * (duration_steps / TOO_SHORT)
+            duration_mult = (duration_steps / TOO_SHORT) ** 2
 
         elif duration_steps <= SWEET_SPOT_MIN:
             # Ramp from 1.0 to 1.3 between TOO_SHORT and SWEET_SPOT_MIN
@@ -372,7 +376,21 @@ class TradingEnv(gym.Env):
             # Theta-aware time decay: penalty grows the longer the trade is open,
             # mimicking real options theta decay (starts ~0.0005, grows to ~0.002+)
             theta_penalty = 0.0005 * (1.0 + self.active_trade_duration / 30.0)
-            step_reward = (delta_pnl * 0.01) - theta_penalty
+
+            # NEW: holding bonus — encourages agent to stay in trade toward sweet spot
+            # Ramps up to +0.001 at step 10, flat to step 20, decays after
+            # Small enough not to override PnL signal, large enough to compete with theta
+            if self.active_trade_duration <= 10:
+                holding_bonus = 0.0001 * self.active_trade_duration   # 0 → 0.001 over 10 steps
+            elif self.active_trade_duration <= 20:
+                holding_bonus = 0.001                                  # flat peak
+            elif self.active_trade_duration <= 45:
+                decay = (self.active_trade_duration - 20) / 25.0
+                holding_bonus = 0.001 * (1.0 - decay)                 # 0.001 → 0.0
+            else:
+                holding_bonus = 0.0                                    # no bonus past TOO_LONG
+
+            step_reward = (delta_pnl * 0.01) - theta_penalty + holding_bonus
             # FIX #3: do NOT accumulate into total_intermediate_given —
             # terminal reward at close is fully independent of shaping history
 
