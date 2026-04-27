@@ -22,7 +22,7 @@ class TradingEnv(gym.Env):
 
     """
 
-    def __init__(self, db, symbol, start_date, end_date, initial_balance=10000, trade_fee=0.5, max_trade_loss_percent=2.0, obs_features=None, price_multiplier=10, evaluation=False, logger=None):
+    def __init__(self, db, symbol, start_date, end_date, initial_balance=10000, trade_fee=0.5, max_trade_loss_percent=2.0, obs_features=None, price_multiplier=10, evaluation=False, logger=None, total_timesteps=1000000):
         super().__init__()
         # Storing the data
         self.obs_features = obs_features
@@ -44,6 +44,8 @@ class TradingEnv(gym.Env):
         self.prev_active_pnl = 0.0
         self.winning_trades = 0
         self.losing_trades = 0
+        self.global_timestep = 0
+        self.total_timesteps = total_timesteps
 
         # Actions
         self.action_space = spaces.Discrete(4)  # Buy Call, Buy Put, Hold, Sell
@@ -162,10 +164,17 @@ class TradingEnv(gym.Env):
             2 = Buy Put   — only valid when no active trade
             3 = Close     — only valid when there IS an active trade
         """
+        progress = self.global_timestep / self.total_timesteps
+        if progress < 0.30:
+            min_hold = 14
+        elif progress < 0.60:
+            min_hold = 9
+        else:
+            min_hold = 5
         if self.active_trade:
             # Can only hold or close
             # Lock out close action until minimum hold period is reached
-            can_close = self.active_trade_duration >= self.MIN_HOLD_STEPS
+            can_close = self.active_trade_duration >= min_hold
             return np.array([True, False, False, can_close], dtype=bool)
         else:
             # Can hold, buy call, or buy put — cannot close nothing
@@ -193,10 +202,10 @@ class TradingEnv(gym.Env):
 
 
         # --- 2. Duration multiplier: bell-curve peaking at sweet spot ---
-        SWEET_SPOT_MIN = 10   # steps (minutes) — start of ideal window
-        SWEET_SPOT_MAX = 20   # steps (minutes) — end of ideal window
-        TOO_SHORT      = 5    # below this: penalise (likely noise trade)
-        TOO_LONG       = 45   # above this: hard theta decay ceiling
+        SWEET_SPOT_MIN = 12   # steps (minutes) — start of ideal window
+        SWEET_SPOT_MAX = 22   # steps (minutes) — end of ideal window
+        TOO_SHORT      = 8   # below this: penalise (likely noise trade)
+        TOO_LONG       = 50   # above this: hard theta decay ceiling
 
         if duration_steps < TOO_SHORT:
             # Ramp up from 0.5 to 1.0 between 0 and TOO_SHORT
@@ -289,6 +298,7 @@ class TradingEnv(gym.Env):
 
     def step(self, action):
         # Implement the logic for taking a step in the environment
+        self.global_timestep += 1
         terminated = False
         truncated = False
         reward = 0.0
@@ -377,18 +387,25 @@ class TradingEnv(gym.Env):
             # mimicking real options theta decay (starts ~0.0005, grows to ~0.002+)
             theta_penalty = 0.0005 * (1.0 + self.active_trade_duration / 30.0)
 
-            # NEW: holding bonus — encourages agent to stay in trade toward sweet spot
-            # Ramps up to +0.001 at step 10, flat to step 20, decays after
-            # Small enough not to override PnL signal, large enough to compete with theta
-            if self.active_trade_duration <= 10:
-                holding_bonus = 0.0001 * self.active_trade_duration   # 0 → 0.001 over 10 steps
-            elif self.active_trade_duration <= 20:
-                holding_bonus = 0.001                                  # flat peak
-            elif self.active_trade_duration <= 45:
-                decay = (self.active_trade_duration - 20) / 25.0
-                holding_bonus = 0.001 * (1.0 - decay)                 # 0.001 → 0.0
+            # Stronger holding bonus — front-loaded in the 5-15 step range
+            # to specifically pull the agent away from the MIN_HOLD boundary
+            if self.active_trade_duration < 5:
+                holding_bonus = 0.0   # lockout zone — no bonus, agent can't close anyway
+
+            elif self.active_trade_duration <= 12:
+                # Strong ramp: 0.0 at step 5 → 0.003 at step 12
+                # This is the critical zone where we need to pull agent away from step-5 exit
+                holding_bonus = 0.003 * ((self.active_trade_duration - 5) / 7.0)
+
+            elif self.active_trade_duration <= 22:
+                holding_bonus = 0.003   # flat peak
+
+            elif self.active_trade_duration <= 50:
+                decay = (self.active_trade_duration - 22) / 28.0
+                holding_bonus = 0.003 * (1.0 - decay)   # decay to 0
+
             else:
-                holding_bonus = 0.0                                    # no bonus past TOO_LONG
+                holding_bonus = 0.0
 
             step_reward = (delta_pnl * 0.01) - theta_penalty + holding_bonus
             # FIX #3: do NOT accumulate into total_intermediate_given —

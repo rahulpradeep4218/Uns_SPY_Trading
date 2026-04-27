@@ -252,7 +252,7 @@ def get_env(config: dict, db: Session, eval_mode: bool=False, dagster_logger=Non
     trade_fee = float(config['rl']['trade_fee'])
     max_trade_loss_percent = float(config['rl']['max_trade_loss_percent'])
     price_multiplier = float(config['rl']['price_multiplier'])
-
+    total_timesteps = int(config['rl']['total_timesteps'])
 
     def make_env():
         return TradingEnv(db=db,
@@ -265,7 +265,8 @@ def get_env(config: dict, db: Session, eval_mode: bool=False, dagster_logger=Non
                           obs_features=obs_features,
                           price_multiplier=price_multiplier,
                           evaluation=eval_mode,
-                          logger=dagster_logger
+                          logger=dagster_logger,
+                          total_timesteps=total_timesteps
                     )
     
     return DummyVecEnv([make_env])
