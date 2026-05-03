@@ -722,7 +722,7 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
             policy='MultiInputPolicy',
             env=env,
             learning_rate=linear_schedule(3e-4),
-            n_steps=2048,
+            n_steps=4096,
             batch_size=512,
             n_epochs=10,
             gamma=0.995,
