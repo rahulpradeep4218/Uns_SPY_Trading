@@ -206,6 +206,16 @@ def get_closest_trading_date(db, symbol, target_date, only_next=False):
 # print(f"Annualized Sharpe: {metrics.calculate_sharpe():.4f}")
 # print(f"Annualized Sortino: {metrics.calculate_sortino():.4f}")
 
+def linear_schedule(initial_value: float):
+    """
+    Returns a callable that linearly decays from initial_value → 0
+    as training progresses 0% → 100%.
+    Pass to MaskablePPO learning_rate, clip_range, and ent_coef.
+    """
+    def func(progress_remaining: float) -> float:
+        return initial_value * progress_remaining
+    return func
+
 
 def get_live_env(config: dict, db: Session, streamer, symbol='SPY', logger=None):
     from rl_functions.trading_env import LiveTradingEnv
@@ -249,27 +259,51 @@ def get_env(config: dict, db: Session, eval_mode: bool=False, dagster_logger=Non
         start_date = get_closest_trading_date(db=db, symbol='SPY', target_date=start_date_first + datetime.timedelta(days=1), only_next=True).time.date()
     end_date = datetime.datetime.strptime(config['rl'][end_date_config_key], "%Y-%m-%d").date()
     initial_balance = float(config['rl']['initial_balance'])
+
     trade_fee = float(config['rl']['trade_fee'])
     max_trade_loss_percent = float(config['rl']['max_trade_loss_percent'])
     price_multiplier = float(config['rl']['price_multiplier'])
     total_timesteps = int(config['rl']['total_timesteps'])
 
-    def make_env():
-        return TradingEnv(db=db,
-                          symbol='SPY',
-                          start_date=start_date,
-                          end_date=end_date,
-                          initial_balance=initial_balance,
-                          trade_fee=trade_fee,
-                          max_trade_loss_percent=max_trade_loss_percent,
-                          obs_features=obs_features,
-                          price_multiplier=price_multiplier,
-                          evaluation=eval_mode,
-                          logger=dagster_logger,
-                          total_timesteps=total_timesteps
-                    )
+    if eval_mode:
+        # Single env, shared db session, deterministic rollout
+        def make_eval_env():
+            return TradingEnv(db=db,
+                            symbol='SPY',
+                            start_date=start_date,
+                            end_date=end_date,
+                            initial_balance=initial_balance,
+                            trade_fee=trade_fee,
+                            max_trade_loss_percent=max_trade_loss_percent,
+                            obs_features=obs_features,
+                            price_multiplier=price_multiplier,
+                            evaluation=True,
+                            logger=dagster_logger,
+                            total_timesteps=total_timesteps
+                        )
     
-    return DummyVecEnv([make_env])
+        return DummyVecEnv([make_eval_env])
+
+    else:
+        # Multiple envs, shared db session, random rollout
+        no_envs = int(config['rl']['no_envs'])
+        env_db = SessionLocal()  # Create a separate DB session for env creation to avoid conflicts with training loop
+        def make_train_env():
+            return TradingEnv(db=env_db,
+                            symbol='SPY',
+                            start_date=start_date,
+                            end_date=end_date,
+                            initial_balance=initial_balance,
+                            trade_fee=trade_fee,
+                            max_trade_loss_percent=max_trade_loss_percent,
+                            obs_features=obs_features,
+                            price_multiplier=price_multiplier,
+                            evaluation=False,
+                            logger=dagster_logger,
+                            total_timesteps=total_timesteps
+                        )   
+    
+        return DummyVecEnv([make_train_env for _ in range(no_envs)])
    
 
 def get_data(symbol: str, start_date: datetime.datetime, end_date: datetime.datetime, db: Session, evaluation: bool = False):
@@ -661,6 +695,8 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
 
             env = VecNormalize.load(vec_path, venv=env)
 
+            env.norm_obs_keys = ["continuous"]
+
             # Set the training env in model
             model.set_env(env)
         else:
@@ -672,19 +708,30 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
         latest_timestep = 0
         mlflow.start_run(run_name=f"RL_Training_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}", tags={"model_name": config['rl']['model_name'], "status": "IN_PROGRESS"})
         run_id = mlflow.active_run().info.run_id
-        policy_kwargs = dict(net_arch=[256, 256])
-        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10., norm_obs_keys=["continuous"])
+        policy_kwargs = dict(net_arch=[512, 512])
+
+        env = VecNormalize(
+                env, 
+                norm_obs=True, 
+                norm_reward=True, 
+                clip_obs=10., 
+                norm_obs_keys=["continuous"]
+        )
+
         model = MaskablePPO(
             policy='MultiInputPolicy',
             env=env,
-            learning_rate=3e-4,
+            learning_rate=linear_schedule(3e-4),
             n_steps=2048,
-            batch_size=128,
-            gamma=0.99,
+            batch_size=512,
+            n_epochs=10,
+            gamma=0.995,
             gae_lambda=0.95,
-            clip_range=0.2,
+            vf_coef=0.25,        # reduce value fn loss weight → policy gradient domin
+            max_grad_norm=0.5,   # gradient clipping to stabilize training
+            clip_range=linear_schedule(0.2),  # linearly decay clip range from 0.2 to 0
             verbose=1,
-            ent_coef=0.02,
+            ent_coef=linear_schedule(0.02), # high exploration early, exploitation late
             policy_kwargs=policy_kwargs,
         )
 
