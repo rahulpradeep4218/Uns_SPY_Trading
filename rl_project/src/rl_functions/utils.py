@@ -731,7 +731,7 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
             max_grad_norm=0.5,   # gradient clipping to stabilize training
             clip_range=linear_schedule(0.2),  # linearly decay clip range from 0.2 to 0
             verbose=1,
-            ent_coef=linear_schedule(0.02), # high exploration early, exploitation late
+            ent_coef=0.02,
             policy_kwargs=policy_kwargs,
         )
 

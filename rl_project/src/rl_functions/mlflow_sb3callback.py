@@ -34,6 +34,13 @@ class MLflowRLCallback(BaseCallback):
         self.pnl_list = [0.0]
 
     def _on_step(self) -> bool:
+        #### Update ent_coef based on training progress - linearly decay from 0.02 to 0.005
+        total_timesteps = self.config['rl']['total_timesteps']
+        progress_remaining = 1.0 - (self.num_timesteps / total_timesteps)
+        new_ent_coef = max(0.005, 0.02 * progress_remaining)  # Linearly decay from 0.02 to 0.005
+        self.model.ent_coef = new_ent_coef
+
+
         dones = self.locals.get("dones")
         infos = self.locals.get("infos")
 
