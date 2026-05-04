@@ -40,6 +40,11 @@ class MLflowRLCallback(BaseCallback):
         new_ent_coef = max(0.005, 0.02 * progress_remaining)  # Linearly decay from 0.02 to 0.005
         self.model.ent_coef = new_ent_coef
 
+        # Sync true global timestep into every env every 1000 steps — frequent enough
+        # to catch the 10%/20% curriculum milestones without 10M redundant dispatches.
+        if self.num_timesteps % 1000 == 0:
+            self.training_env.env_method('set_global_timestep', self.num_timesteps)
+
 
         dones = self.locals.get("dones")
         infos = self.locals.get("infos")
@@ -160,6 +165,8 @@ class MLflowRLCallback(BaseCallback):
         # Freeze normalization
         eval_env.training = False
         eval_env.norm_reward = False
+        # Sync training progress so action_masks() uses the same min_hold as late training
+        eval_env.env_method('set_global_timestep', self.num_timesteps)
 
         obs = eval_env.reset()
         done = False

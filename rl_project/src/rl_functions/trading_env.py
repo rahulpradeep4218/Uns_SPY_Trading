@@ -122,10 +122,14 @@ class TradingEnv(gym.Env):
         self.pnl_list = [0.0]
 
         self.MIN_HOLD_STEPS = 5
+        self.current_min_hold = 14  # updated each call to action_masks()
 
         info = {}
 
         return self._get_observation(), info
+
+    def set_global_timestep(self, timestep: int):
+        self.global_timestep = timestep
 
     # def calculate_final_reward(self, final_pnl, duration_steps):
     #     base_reward = (np.sign(final_pnl) * (final_pnl ** 2)) / 100.0
@@ -165,12 +169,13 @@ class TradingEnv(gym.Env):
             3 = Close     — only valid when there IS an active trade
         """
         progress = self.global_timestep / self.total_timesteps
-        if progress < 0.30:
-            min_hold = 14
-        elif progress < 0.60:
+        if progress < 0.10:
+            min_hold = 15
+        elif progress < 0.20:
             min_hold = 9
         else:
             min_hold = 5
+        self.current_min_hold = min_hold  # kept so step() can align hold bonus zone
         if self.active_trade:
             # Can only hold or close
             # Lock out close action until minimum hold period is reached
@@ -387,22 +392,26 @@ class TradingEnv(gym.Env):
             # mimicking real options theta decay (starts ~0.0005, grows to ~0.002+)
             theta_penalty = 0.0005 * (1.0 + self.active_trade_duration / 30.0)
 
-            # Stronger holding bonus — front-loaded in the 5-15 step range
-            # to specifically pull the agent away from the MIN_HOLD boundary
-            if self.active_trade_duration < 5:
-                holding_bonus = 0.0   # lockout zone — no bonus, agent can't close anyway
+            # Hold bonus zone is anchored to current_min_hold so it stays coherent
+            # with the action-masking curriculum (min_hold decays 14→9→5 over training).
+            # Ramp starts at min_hold, peaks at min_hold+8, decays to 0 at min_hold+38.
+            lockout = self.current_min_hold
+            ramp_end = lockout + 8
+            peak_end = lockout + 18
+            decay_end = lockout + 38
 
-            elif self.active_trade_duration <= 12:
-                # Strong ramp: 0.0 at step 5 → 0.003 at step 12
-                # This is the critical zone where we need to pull agent away from step-5 exit
-                holding_bonus = 0.003 * ((self.active_trade_duration - 5) / 7.0)
+            if self.active_trade_duration < lockout:
+                holding_bonus = 0.0   # can't close yet anyway
 
-            elif self.active_trade_duration <= 22:
+            elif self.active_trade_duration <= ramp_end:
+                holding_bonus = 0.003 * ((self.active_trade_duration - lockout) / 8.0)
+
+            elif self.active_trade_duration <= peak_end:
                 holding_bonus = 0.003   # flat peak
 
-            elif self.active_trade_duration <= 50:
-                decay = (self.active_trade_duration - 22) / 28.0
-                holding_bonus = 0.003 * (1.0 - decay)   # decay to 0
+            elif self.active_trade_duration <= decay_end:
+                decay = (self.active_trade_duration - peak_end) / 20.0
+                holding_bonus = 0.003 * (1.0 - decay)
 
             else:
                 holding_bonus = 0.0
@@ -447,12 +456,18 @@ class TradingEnv(gym.Env):
         if total_pnl <= -self.max_episode_loss:
             terminated = True
 
-        # Survival Bonus
+        # In eval mode: don't stop on stop-loss — advance to the next test day instead
+        # so PnL doesn't bleed further on the same day's remaining bars.
+        eval_stop_loss_hit = terminated and self.evaluation
+        if eval_stop_loss_hit:
+            terminated = False
+
+        # Survival Bonus — kept small so it doesn't dominate VecNormalize reward variance
         if truncated:
             if total_pnl > 0:
-                step_reward += 0.5  # Bonus for surviving to end of day with profit
+                step_reward += 0.1
             elif total_pnl > (-self.max_episode_loss * 0.5):
-                step_reward += 0.1  # Small bonus for surviving with less than half max loss
+                step_reward += 0.02
 
         info = {
             "total_pnl": total_pnl,
@@ -476,12 +491,10 @@ class TradingEnv(gym.Env):
             print(info)
             self.episode_id += 1
 
-        if terminated and self.evaluation:
-            terminated = False
-
         #### Logic for checking if evaluation and updating data if end of current day reached
+        # Triggers on natural end-of-day OR when stop-loss is hit during eval
 
-        if self.evaluation and self.current_step >= (self.max_steps-1):
+        if self.evaluation and (self.current_step >= (self.max_steps-1) or eval_stop_loss_hit):
             # Load next day data
             next_date = self.data['Date'].iloc[0].date() + timedelta(days=1)
             new_data, status = get_data(symbol=self.symbol,

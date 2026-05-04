@@ -206,14 +206,14 @@ def get_closest_trading_date(db, symbol, target_date, only_next=False):
 # print(f"Annualized Sharpe: {metrics.calculate_sharpe():.4f}")
 # print(f"Annualized Sortino: {metrics.calculate_sortino():.4f}")
 
-def linear_schedule(initial_value: float):
+def linear_schedule(initial_value: float, min_val: float = 0.0):
     """
-    Returns a callable that linearly decays from initial_value → 0
+    Returns a callable that linearly decays from initial_value → min_val
     as training progresses 0% → 100%.
     Pass to MaskablePPO learning_rate, clip_range, and ent_coef.
     """
     def func(progress_remaining: float) -> float:
-        return initial_value * progress_remaining
+        return max(min_val, initial_value * progress_remaining)
     return func
 
 
@@ -711,17 +711,18 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
         policy_kwargs = dict(net_arch=[512, 512])
 
         env = VecNormalize(
-                env, 
-                norm_obs=True, 
-                norm_reward=True, 
-                clip_obs=10., 
+                env,
+                norm_obs=True,
+                norm_reward=True,
+                clip_obs=10.,
+                gamma=0.995,          # match PPO gamma so reward variance estimate is calibrated
                 norm_obs_keys=["continuous"]
         )
 
         model = MaskablePPO(
             policy='MultiInputPolicy',
             env=env,
-            learning_rate=linear_schedule(3e-4),
+            learning_rate=linear_schedule(3e-4, min_val=1e-5),
             n_steps=4096,
             batch_size=512,
             n_epochs=10,
@@ -729,7 +730,7 @@ def do_training_with_resume(config: dict, dagster_context, model_metadata: dict 
             gae_lambda=0.95,
             vf_coef=0.25,        # reduce value fn loss weight → policy gradient domin
             max_grad_norm=0.5,   # gradient clipping to stabilize training
-            clip_range=linear_schedule(0.2),  # linearly decay clip range from 0.2 to 0
+            clip_range=linear_schedule(0.2, min_val=0.05),  # decay clip range, floor at 0.05 so updates never freeze
             verbose=1,
             ent_coef=0.02,
             policy_kwargs=policy_kwargs,

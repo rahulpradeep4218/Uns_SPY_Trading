@@ -20,8 +20,6 @@ obs_features = get_observation_features(inf_config)
 db = SessionLocal()
 
 
-
-
 def main():
     print("Observation features:", obs_features)
     START_DATE = datetime.date(2025, 7, 18)
