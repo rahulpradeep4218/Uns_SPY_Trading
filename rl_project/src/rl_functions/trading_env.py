@@ -50,7 +50,7 @@ class TradingEnv(gym.Env):
         # Actions
         self.action_space = spaces.Discrete(4)  # Buy Call, Buy Put, Hold, Sell
 
-        continuous_dim = len(self.obs_features) + 2
+        continuous_dim = len(self.obs_features) + 4
 
         self.observation_space = spaces.Dict({
             "continuous": spaces.Box(
@@ -276,10 +276,16 @@ class TradingEnv(gym.Env):
 
         progress = (self.current_step + 1) / self.max_steps if self.max_steps > 0 else 0.0
         
+        # Normalize active trade duration to [0, 1] over a 60-minute window
+        duration_norm = float(np.clip(self.active_trade_duration / 60.0, 0.0, 1.0))
+
+        # Explicit unrealized PnL signal, separate from loss_ratio which mixes realized+unrealized
+        unrealized_pnl_norm = float(np.clip(self.active_pnl / self.max_episode_loss, -1.0, 1.0)) if self.max_episode_loss > 0 else 0.0
+
         # Continuous part — will be normalized by VecNormalize
         continuous_obs = np.concatenate([
             market_obs,
-            np.array([progress, loss_ratio], dtype=np.float32)
+            np.array([progress, loss_ratio, duration_norm, unrealized_pnl_norm], dtype=np.float32)
         ])
 
         # Discrete part — bypasses VecNormalize normalization

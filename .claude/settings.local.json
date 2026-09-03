@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Projects\\\\Trading\\\\Uns_SPY_Trading\" -Recurse)",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}
